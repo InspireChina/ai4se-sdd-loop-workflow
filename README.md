@@ -1,6 +1,6 @@
 # ai4se-sdd-loop-workflow
 
-从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review**的工程化 Workflow。配置和产出写在业务项目里。
+从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review → 提交**的工程化 Workflow。配置和产出写在业务项目里；结束时汇总须人工执行的后续事项（SQL / 配置等）。
 
 **快速接入、可按项目扩展**：业务侧 `sddl init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
 
@@ -62,10 +62,12 @@ your-project/
 | 文件 | 作用 |
 |------|------|
 | `workflow.yaml` | 产出目录名（`docs_dir`）等 |
-| `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；优先级高于引擎通用 prompt |
+| `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；含 `commit_code`（默认 `[]`） |
 | `start-workflow` skill | 准备需求文件并拼装启动命令（见下）；**不在当前 AI 对话里执行** |
 
 跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
+
+> **已 init 过的项目**：`sddl init` **不覆盖**已有 `ai-rules.yaml`。若缺少 `commit_code`，请手工加上（见下文示例）；需要自动提交时再挂上项目自有 rule 文件。
 
 ### `start-workflow` skill 用在什么时候
 
@@ -106,8 +108,9 @@ your-project/
 - `--auto`：`prompts/*.auto.md`，按扩展 rule 自决，不提问  
 - 测试代码只在「测试自验证」写；实现节点不写 `src/test`  
 - AI Review 的语言/风格细则放在项目 `ai-rules`，引擎 prompt 只定通用整洁度闭环  
-- 提交策略放在 `nodes.commit_code` 的扩展 rule；未配置时不自动提交  
-- 人工后续（SQL / 各环境配置 / 初始化脚本等）在实现报告记录，由提交节点汇总进 Action List
+- 提交策略放在 `nodes.commit_code` 的扩展 rule；未配置时不自动提交；**一律禁止提交 `docs_dir`**  
+- 人工后续（SQL / 各环境配置 / 初始化脚本等）在实现报告「人工后续事项」记录，由提交节点定稿为「后续 Action List」
+
 ---
 
 ## 4. 断点续接
@@ -172,7 +175,8 @@ sddl start --tool cursor --file "/path/to/prd.md" --name login --fresh
 | 配置项 | 作用 |
 |--------|------|
 | `ai_rules_dir` | 规则正文所在目录，相对本配置目录；默认 `ai-rules`（即 `sdd-loop-workflow-config/ai-rules/`） |
-| `nodes.<节点ID>` | 该节点要注入的 markdown 文件列表（文件名相对 `ai_rules_dir`）。未列出的节点不注入扩展 rule |
+| `nodes.<节点ID>` | 该节点要注入的 markdown 文件列表（文件名相对 `ai_rules_dir`）。未列出或 `[]` 的节点不注入扩展 rule |
+| `nodes.commit_code` | 提交策略。`[]` / 未配置：人工询问是否提交，`--auto` 跳过；挂上 md 后按 rule 提交。**无论是否配置，禁止提交 `docs_dir`** |
 
 示例：
 
@@ -188,15 +192,25 @@ nodes:
   ai_review:
     - coding-style.md
     - security-baseline.md
-  # 未配置或 []：人工询问是否提交；--auto 跳过。配上则按 rule 自动提交（仍禁止 docs_dir）
+  # 未配置或 []：人工询问是否提交；--auto 跳过。配上项目自有 rule 则按 rule 提交（仍禁止 docs_dir）
   commit_code: []
 ```
 
 同一 `.md` 可挂到多个节点下复用；按节点拆文件更清晰（实现吃风格与分层，验证吃测试栈，AI Review 吃风格与安全等）。
 
+### 提交与后续 Action List
+
+| 行为 | 说明 |
+|------|------|
+| 默认（`commit_code: []`） | 拟 msg → 问用户是否提交；拒绝则跳过，workflow 仍正常结束 |
+| `--auto` 且无 rule | **跳过提交**，在 `07-commit.md` 写明原因 |
+| 配置了 commit rule | 按项目自有 rule 提交（可规定 msg 格式、是否 push 等） |
+| `docs_dir` | **永远不要** stage/commit（含 `07-commit.md` 自身） |
+| Action List | `04` 写「人工后续事项」→ `07` 定稿「后续 Action List（须人工执行）」；须具体（SQL/配置 key/环境/脚本路径），无则写「无」 |
+
 ### `ai-rules/*.md` — 规则正文
 
-每个文件写项目自己的硬约束（语言、分层、测试栈、安全基线等）。引擎 prompt 只定通用流程，**具体规范写在这里**。
+每个文件写项目自己的硬约束（语言、分层、测试栈、安全基线、提交策略等）。引擎 prompt 只定通用流程，**具体规范写在这里**。
 
 **编码约定示例**（`ai-rules/coding-style.md`）：
 

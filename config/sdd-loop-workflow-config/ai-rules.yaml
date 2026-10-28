@@ -2,11 +2,14 @@
 # SDD Loop Workflow — 项目扩展规则映射
 # =============================================================================
 # 位置：业务项目根 / sdd-loop-workflow-config / ai-rules.yaml
-# （由 sddl init 生成；按项目修改。）
+# （由 sddl init 生成；按项目修改。已存在时 init 不会覆盖。）
 #
 # ai_rules_dir：规则正文目录，相对本配置目录（默认 ai-rules/）
 # nodes.<节点ID>：该节点注入到 prompt {{ai_rules}} 的 markdown 文件列表
 # 优先级高于引擎通用 prompt；无人值守时优先按本节消解 pending。
+#
+# commit_code：未配置 / [] → 人工询问是否提交；--auto 跳过。
+#   需要自动提交时在此挂上项目自有 rule（引擎硬约束：禁止提交 docs_dir）。
 # =============================================================================
 
 ai_rules_dir: ai-rules
@@ -28,6 +31,4 @@ nodes:
     - ddd-design-standard.md
   ai_review:
     - ddd-design-standard.md
-  # commit_code：未配置或空列表 = 人工询问是否提交 / --auto 时跳过。
-  # 需要自动提交时在此挂上项目 rule（仍禁止提交 docs_dir）。
   commit_code: []
