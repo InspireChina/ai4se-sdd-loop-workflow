@@ -1,34 +1,44 @@
 # =============================================================================
-# SDD Loop Workflow — 项目扩展规则映射
+# SDD Loop Workflow — 项目扩展规则映射（核心扩展点）
 # =============================================================================
 # 位置：业务项目根 / sdd-loop-workflow-config / ai-rules.yaml
 # （由 sddl init 生成；按项目修改。已存在时 init 不会覆盖。）
 #
-# ai_rules_dir：规则正文目录，相对本配置目录（默认 ai-rules/）
-# nodes.<节点ID>：该节点注入到 prompt {{ai_rules}} 的 markdown 文件列表
-# 优先级高于引擎通用 prompt；无人值守时优先按本节消解 pending。
+# ---------- 怎么扩展 ----------
+# 1. 在 ai-rules/ 下为需要定制的节点准备 markdown（一份或多份），写清「你们项目的规范」
+#    （分层、命名、测试栈、安全基线、提交策略等）。也可先共用下面的 project-standards.md，
+#    再按节点拆成 implement_code.md、verify_tests.md 等。
+# 2. 在本文件 nodes.<节点ID> 下列出要注入的 md（相对 ai_rules_dir）。未列出的节点不注入。
+# 3. 若某节点需要用到项目已有的 MCP、IDE/Agent Rules、Skills：不要在本 yaml 另配工具表，
+#    直接在对应扩展 md 里写明「用哪个、何时用、怎么用」即可——引擎会把该 md 注入该节点
+#    prompt 的 {{ai_rules}}，优先级高于引擎通用提示词。
 #
-# commit_code：未配置 / [] → 人工询问是否提交；--auto 跳过。
-#   需要自动提交时在此挂上项目自有 rule（引擎硬约束：禁止提交 docs_dir）。
+# ---------- 节点与提交 ----------
+# 常用节点 ID：analyze_requirements / create_plan / design_test_cases /
+#   review_plan_and_tests / split_tasks / implement_code / verify_tests /
+#   ai_review / commit_code
+# commit_code：不配 = 人工询问是否提交、--auto 跳过；配上并在 md 写明策略则按 md 执行。
+# 引擎硬约束：禁止提交 docs_dir（与是否配置 commit_code 无关）。
 # =============================================================================
 
 ai_rules_dir: ai-rules
 
 nodes:
   analyze_requirements:
-    - ddd-design-standard.md
+    - project-standards.md
   create_plan:
-    - ddd-design-standard.md
+    - project-standards.md
   design_test_cases:
-    - ddd-design-standard.md
+    - project-standards.md
   review_plan_and_tests:
-    - ddd-design-standard.md
+    - project-standards.md
   split_tasks:
-    - ddd-design-standard.md
+    - project-standards.md
   implement_code:
-    - ddd-design-standard.md
+    - project-standards.md
   verify_tests:
-    - ddd-design-standard.md
+    - project-standards.md
   ai_review:
-    - ddd-design-standard.md
-  commit_code: []
+    - project-standards.md
+  commit_code:
+    - project-standards.md

@@ -2,7 +2,7 @@
 
 从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review → 提交**的工程化 Workflow。配置和产出写在业务项目里；结束时汇总须人工执行的后续事项（SQL / 配置等）。
 
-**快速接入、可按项目扩展**：业务侧 `sddl init` 即可用，规范与规则落在 `sdd-loop-workflow-config/`，不必改引擎；需要时再通过扩展 rule、prompt 与节点编排加深定制。
+**按项目扩展的核心入口是 `sdd-loop-workflow-config/ai-rules`**（见 [§5](#5-核心扩展点ai-rules)）：把项目规范、以及各节点要用的 MCP / Rules / Skills，写进扩展 md 并在 `ai-rules.yaml` 挂到对应节点即可，**不必改引擎 prompt**。`sddl init` 后改业务侧配置就能用。
 
 CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
 
@@ -53,21 +53,19 @@ sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 ```text
 your-project/
 ├── sdd-loop-workflow-config/     # 业务配置（改这里）
-│   ├── workflow.yaml             # docs_dir
-│   ├── ai-rules.yaml             # 各节点用哪些扩展 rule
-│   └── ai-rules/*.md             # 规则正文
+│   ├── workflow.yaml             # docs_dir 等运行时目录
+│   ├── ai-rules.yaml             # 【核心】节点 → 扩展 md 映射
+│   └── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
 └── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
 ```
 
 | 文件 | 作用 |
 |------|------|
-| `workflow.yaml` | 产出目录名（`docs_dir`）等 |
-| `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；含 `commit_code`（默认 `[]`） |
+| `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + 工具引用 |
+| `workflow.yaml` | `docs_dir` 等运行时目录 |
 | `start-workflow` skill | 准备需求文件并拼装启动命令（见下）；**不在当前 AI 对话里执行** |
 
 跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
-
-> **已 init 过的项目**：`sddl init` **不覆盖**已有 `ai-rules.yaml`。若缺少 `commit_code`，请手工加上（见下文示例）；需要自动提交时再挂上项目自有 rule 文件。
 
 ### `start-workflow` skill 用在什么时候
 
@@ -104,12 +102,10 @@ your-project/
 | AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
 | 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
 
-- 人工：`prompts/*.md`，澄清与审批需确认  
-- `--auto`：`prompts/*.auto.md`，按扩展 rule 自决，不提问  
-- 测试代码只在「测试自验证」写；实现节点不写 `src/test`  
-- AI Review 的语言/风格细则放在项目 `ai-rules`，引擎 prompt 只定通用整洁度闭环  
-- 提交策略放在 `nodes.commit_code` 的扩展 rule；未配置时不自动提交；**一律禁止提交 `docs_dir`**  
-- 人工后续（SQL / 各环境配置 / 初始化脚本等）在实现报告「人工后续事项」记录，由提交节点定稿为「后续 Action List」
+- 人工：`prompts/*.md`，澄清与审批需确认；`--auto` 用 `*.auto.md`，按 `ai-rules` 自决  
+- 测试只在「测试自验证」写；实现节点不写测试  
+- **定制项目行为 → 只改 `ai-rules`**（[§5](#5-核心扩展点ai-rules)），不要改引擎 `prompts/`  
+- 人工后续（SQL / 配置等）→ Action List；**禁止提交 `docs_dir`**
 
 ---
 
@@ -156,79 +152,63 @@ sddl start --tool cursor --file "/path/to/prd.md" --name login --fresh
 
 ---
 
-## 5. 业务配置说明（`sdd-loop-workflow-config/`）
+## 5. 核心扩展点：`ai-rules`
 
-`sddl init` 生成后改这里即可按项目定制，**不必改引擎**。
+业务侧目录：`sdd-loop-workflow-config/`。**按项目定制时优先只改 `ai-rules`**，不必改引擎仓库里的 `prompts/` 或节点编排。
 
-### `workflow.yaml` — 运行时目录
-
-| 配置项 | 作用 |
+| 改什么 | 作用 |
 |--------|------|
-| `docs_dir` | 文档产出根目录（相对业务项目根）。默认 `spec`；需求产出为 `<业务根>/<docs_dir>/<需求名>/`，如 `spec/login/` |
+| `ai-rules.yaml` | 声明「哪个节点注入哪些 md」 |
+| `ai-rules/*.md` | 写**你们项目的规范**；需要时在同一文件里引用 MCP / Rules / Skills |
 
-节点用的 tool / prompt / mode **不在这里配**，在引擎仓库的 `config/workflow.yaml`。
+正文经 `{{ai_rules}}` 注入对应节点，**优先级高于**引擎通用提示词；`--auto` 也优先按这里消解歧义。
 
-### `ai-rules.yaml` — 扩展规则映射
+### 怎么扩展（三步）
 
-规则正文会注入对应节点 prompt 的 `{{ai_rules}}`，**优先级高于**引擎通用提示词；`--auto` 时也优先按这里消解歧义。
-
-| 配置项 | 作用 |
-|--------|------|
-| `ai_rules_dir` | 规则正文所在目录，相对本配置目录；默认 `ai-rules`（即 `sdd-loop-workflow-config/ai-rules/`） |
-| `nodes.<节点ID>` | 该节点要注入的 markdown 文件列表（文件名相对 `ai_rules_dir`）。未列出或 `[]` 的节点不注入扩展 rule |
-| `nodes.commit_code` | 提交策略。`[]` / 未配置：人工询问是否提交，`--auto` 跳过；挂上 md 后按 rule 提交。**无论是否配置，禁止提交 `docs_dir`** |
-
-示例：
+1. 在 `ai-rules/` 下准备 md：可先改 init 自带的 `project-standards.md`，或按节点拆成 `implement_code.md`、`verify_tests.md` 等，写清项目约定。  
+2. 在 `ai-rules.yaml` 的 `nodes.<节点ID>` 下列出这些文件（未列出的节点不注入）。  
+3. 某节点要用项目已有的 **MCP / IDE·Agent Rules / Skills** 时：在**该节点对应的扩展 md**里写明「用哪个、何时用、怎么用」——**不要**在 yaml 里另配工具表。
 
 ```yaml
+# ai-rules.yaml
 ai_rules_dir: ai-rules
 
 nodes:
+  analyze_requirements:
+    - project-standards.md
   implement_code:
-    - coding-style.md
-    - package-structure.md
+    - project-standards.md   # 可换成 implement_code.md 等
   verify_tests:
-    - test-conventions.md
+    - project-standards.md
   ai_review:
-    - coding-style.md
-    - security-baseline.md
-  # 未配置或 []：人工询问是否提交；--auto 跳过。配上项目自有 rule 则按 rule 提交（仍禁止 docs_dir）
-  commit_code: []
+    - project-standards.md
+  # commit_code:             # 需要定制提交策略时再打开
+  #   - project-standards.md
 ```
 
-同一 `.md` 可挂到多个节点下复用；按节点拆文件更清晰（实现吃风格与分层，验证吃测试栈，AI Review 吃风格与安全等）。
+```markdown
+# project-standards.md（或节点专用 md）里引用工具
+
+- MCP：`user-jira` — 澄清时按 issue key 拉取描述与验收标准
+- Rules：遵守仓库 `.cursor/rules/api-compat.mdc`
+- Skills：Colla 需求先按项目 `fetch-colla-prd` 的读法拉取
+```
+
+常用节点 ID：`analyze_requirements` / `create_plan` / `design_test_cases` / `review_plan_and_tests` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
 
 ### 提交与后续 Action List
 
 | 行为 | 说明 |
 |------|------|
-| 默认（`commit_code: []`） | 拟 msg → 问用户是否提交；拒绝则跳过，workflow 仍正常结束 |
-| `--auto` 且无 rule | **跳过提交**，在 `07-commit.md` 写明原因 |
-| 配置了 commit rule | 按项目自有 rule 提交（可规定 msg 格式、是否 push 等） |
-| `docs_dir` | **永远不要** stage/commit（含 `07-commit.md` 自身） |
-| Action List | `04` 写「人工后续事项」→ `07` 定稿「后续 Action List（须人工执行）」；须具体（SQL/配置 key/环境/脚本路径），无则写「无」 |
+| 未配 `commit_code` | 拟 msg → 问用户；拒绝则跳过；`--auto` 跳过提交 |
+| 已配并在 md 写明策略 | 按扩展 md 提交（msg / 是否 push 等） |
+| `docs_dir` | **禁止** stage/commit（含 `07-commit.md`） |
+| Action List | `04`「人工后续事项」→ `07`「后续 Action List」；须具体，无则写「无」 |
 
-### `ai-rules/*.md` — 规则正文
+### 其它业务配置：`workflow.yaml`
 
-每个文件写项目自己的硬约束（语言、分层、测试栈、安全基线、提交策略等）。引擎 prompt 只定通用流程，**具体规范写在这里**。
+| 配置项 | 作用 |
+|--------|------|
+| `docs_dir` | 文档产出根目录（相对业务项目根）。默认 `spec`；如 `spec/login/` |
 
-**编码约定示例**（`ai-rules/coding-style.md`）：
-
-```markdown
-# 编码约定（示例）
-
-- 新代码放在 `com.example.order` 下按应用服务 / 领域 / 基础设施分层，勿新建平行顶层包。
-- 禁止为单次调用去改已被多处使用的公共 Utils；优先在本模块写私有方法。
-- 魔法数字：超时、重试次数等提取为命名常量；业务状态码用枚举，勿散落字面量。
-- API 入参校验失败返回统一错误码，勿直接抛未包装异常给调用方。
-```
-
-**测试约定示例**（`ai-rules/test-conventions.md`）：
-
-```markdown
-# 测试约定（示例）
-
-- 单测用项目已有 JUnit5 + Mockito；禁止另起测试框架。
-- 无 API 集成测试工程时，`TC-API-*` 标 skip，并在报告写明依据。
-- 外部支付 / 短信一律 mock；不要在 CI 打真实第三方。
-```
+节点用的 tool / prompt / mode **不在这里配**，在引擎仓库的 `config/workflow.yaml`。
