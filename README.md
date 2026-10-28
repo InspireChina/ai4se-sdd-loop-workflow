@@ -65,7 +65,7 @@ your-project/
 | `ai-rules.yaml` + `ai-rules/` | 项目扩展规范，注入各节点；优先级高于引擎通用 prompt |
 | `start-workflow` skill | 准备需求文件并拼装启动命令（见下）；**不在当前 AI 对话里执行** |
 
-跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `06-ai-review.md`）。
+跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
 
 ### `start-workflow` skill 用在什么时候
 
@@ -88,7 +88,7 @@ your-project/
 ## 3. 有哪些节点
 
 ```text
-需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试 → AI Review
+需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试 → AI Review → 提交
 ```
 
 | 节点 | 产出 | 做什么 |
@@ -97,15 +97,17 @@ your-project/
 | 制定计划 / 设计用例 | `02-plan.md`、`02-test-cases.md` | 并行初稿 |
 | 计划与用例评审 | `02-plan-test-review.md` | 对齐并确认 |
 | 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
-| 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码 |
+| 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
 | 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
 | AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
+| 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
 
 - 人工：`prompts/*.md`，澄清与审批需确认  
 - `--auto`：`prompts/*.auto.md`，按扩展 rule 自决，不提问  
 - 测试代码只在「测试自验证」写；实现节点不写 `src/test`  
-- AI Review 的语言/风格细则放在项目 `ai-rules`，引擎 prompt 只定通用整洁度闭环
-
+- AI Review 的语言/风格细则放在项目 `ai-rules`，引擎 prompt 只定通用整洁度闭环  
+- 提交策略放在 `nodes.commit_code` 的扩展 rule；未配置时不自动提交  
+- 人工后续（SQL / 各环境配置 / 初始化脚本等）在实现报告记录，由提交节点汇总进 Action List
 ---
 
 ## 4. 断点续接
@@ -118,7 +120,7 @@ your-project/
 |------|------|
 | 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `sddl start` |
 | 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `sddl start`（可带原 `--file`）；**不要**加 `--fresh` |
-| 整条链路已完成（存在完成态的 `06-ai-review.md`） | 再 `sddl start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
+| 整条链路已完成（存在完成态的 `07-commit.md`） | 再 `sddl start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
 
 ```bash
 # 续跑（推荐始终带上 --name，与首次一致）
@@ -140,7 +142,8 @@ sddl start --tool cursor --file "/path/to/prd.md" --name login --fresh
 | `03-tasks` 已批 | `implement_code` |
 | `04-implementation` 已有 | `verify_tests` |
 | `05-test-report` 已有 | `ai_review` |
-| `06-ai-review` 已 completed 且无下一节点 | 整单结束，无需续跑 |
+| `06-ai-review` 已有 | `commit_code` |
+| `07-commit` 已 completed 且无下一节点 | 整单结束，无需续跑 |
 
 要点：
 
@@ -185,6 +188,8 @@ nodes:
   ai_review:
     - coding-style.md
     - security-baseline.md
+  # 未配置或 []：人工询问是否提交；--auto 跳过。配上则按 rule 自动提交（仍禁止 docs_dir）
+  commit_code: []
 ```
 
 同一 `.md` 可挂到多个节点下复用；按节点拆文件更清晰（实现吃风格与分层，验证吃测试栈，AI Review 吃风格与安全等）。

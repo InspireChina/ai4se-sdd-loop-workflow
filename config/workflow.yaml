@@ -126,3 +126,15 @@ nodes:
     prompt_auto: prompts/06_ai_review.auto.md
     output: 06-ai-review.md
     inputs: []
+
+  commit_code:
+    name: 提交代码
+    tool: cursor
+    mode: interactive
+    prompt: prompts/07_commit.md
+    prompt_auto: prompts/07_commit.auto.md
+    output: 07-commit.md
+    inputs:
+      - doc: 04-implementation.md
+      - doc: 05-test-report.md
+      - doc: 06-ai-review.md

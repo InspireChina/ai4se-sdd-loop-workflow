@@ -28,3 +28,6 @@ nodes:
     - ddd-design-standard.md
   ai_review:
     - ddd-design-standard.md
+  # commit_code：未配置或空列表 = 人工询问是否提交 / --auto 时跳过。
+  # 需要自动提交时在此挂上项目 rule（仍禁止提交 docs_dir）。
+  commit_code: []
