@@ -18,6 +18,7 @@ APP_WORKFLOW_CONFIG_FILENAME = "workflow.yaml"
 DEFAULT_AI_RULES_SUBDIR = "ai-rules"
 DEFAULT_DOCS_DIR = "spec"
 DEFAULT_APP_ROOT = ".."
+DEFAULT_TOOL = "claude_code"
 
 
 @dataclass
@@ -36,6 +37,7 @@ class NodeConfig:
     mode: str = "headless"  # headless | interactive
     # 无人值守（--auto）专用 prompt；缺省时与 prompt_file 相同
     prompt_file_auto: str = ""
+    model: str = ""  # 空 = 该 tool 自带默认模型
     inputs: list[NodeInput] = field(default_factory=list)
     extend_rules: list[str] = field(default_factory=list)
 
@@ -52,6 +54,8 @@ class WorkflowConfig:
     nodes: dict[str, NodeConfig]
     ai_rules_dir: str = DEFAULT_AI_RULES_SUBDIR
     app_root: str = ".."
+    default_tool: str = DEFAULT_TOOL
+    default_model: str = ""
 
 
 def _parse_input(raw: dict[str, str]) -> NodeInput:
@@ -66,6 +70,20 @@ def _parse_rule_list(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _as_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _pick_str(*candidates: Any) -> str:
+    for item in candidates:
+        text = _as_str(item)
+        if text:
+            return text
+    return ""
 
 
 def app_config_dir(app_root: Path) -> Path:
@@ -104,7 +122,7 @@ def load_ai_rules_config(app_root: Path) -> tuple[str, dict[str, list[str]]]:
 
 
 def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
-    """从业务根 sdd-loop-workflow-config/workflow.yaml 读取 docs_dir 等。"""
+    """从业务根 sdd-loop-workflow-config/workflow.yaml 读取运行时覆盖项。"""
     path = app_config_dir(app_root) / APP_WORKFLOW_CONFIG_FILENAME
     if not path.is_file():
         logger.warning(
@@ -118,14 +136,43 @@ def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
         data: dict[str, Any] = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         return {}
-    # 兼容误包一层 workflow:
+    # 兼容误包一层 workflow:（保留顶层 defaults/nodes 以便覆盖）
     if "workflow" in data and isinstance(data["workflow"], dict):
         nested = dict(data["workflow"])
-        for key in ("docs_dir", "app_root"):
+        for key in ("docs_dir", "app_root", "defaults", "nodes"):
             if key not in nested and key in data:
                 nested[key] = data[key]
         return nested
     return data
+
+
+def _resolve_node_tool_model(
+    node_id: str,
+    engine_cfg: dict[str, Any],
+    *,
+    engine_defaults: dict[str, Any],
+    app_defaults: dict[str, Any],
+    app_nodes: dict[str, Any],
+) -> tuple[str, str]:
+    """业务 nodes > 业务 defaults > 引擎 nodes > 引擎 defaults。"""
+    app_node = app_nodes.get(node_id)
+    if not isinstance(app_node, dict):
+        app_node = {}
+
+    tool = _pick_str(
+        app_node.get("tool"),
+        app_defaults.get("tool"),
+        engine_cfg.get("tool"),
+        engine_defaults.get("tool"),
+        DEFAULT_TOOL,
+    )
+    model = _pick_str(
+        app_node.get("model"),
+        app_defaults.get("model"),
+        engine_cfg.get("model"),
+        engine_defaults.get("model"),
+    )
+    return tool, model
 
 
 def load_workflow_config(config_path: Path) -> WorkflowConfig:
@@ -135,6 +182,9 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
     engine_workflow = data.get("workflow") or {}
     if not isinstance(engine_workflow, dict):
         engine_workflow = {}
+    engine_defaults = data.get("defaults") or {}
+    if not isinstance(engine_defaults, dict):
+        engine_defaults = {}
     nodes_raw: dict[str, Any] = data["nodes"]
 
     # 先用引擎兜底 + 环境变量定位业务根，再读业务侧运行时配置覆盖
@@ -151,16 +201,41 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         or DEFAULT_DOCS_DIR
     ).strip() or DEFAULT_DOCS_DIR
 
+    app_defaults = app_settings.get("defaults") or {}
+    if not isinstance(app_defaults, dict):
+        app_defaults = {}
+    app_nodes = app_settings.get("nodes") or {}
+    if not isinstance(app_nodes, dict):
+        app_nodes = {}
+
+    default_tool = _pick_str(
+        app_defaults.get("tool"),
+        engine_defaults.get("tool"),
+        DEFAULT_TOOL,
+    )
+    default_model = _pick_str(
+        app_defaults.get("model"),
+        engine_defaults.get("model"),
+    )
+
     ai_rules_dir, node_extend_rules = load_ai_rules_config(resolved_app)
 
     nodes: dict[str, NodeConfig] = {}
     for node_id, cfg in nodes_raw.items():
         prompt = str(cfg["prompt"]).strip()
         prompt_auto = str(cfg.get("prompt_auto") or "").strip() or prompt
+        tool, model = _resolve_node_tool_model(
+            node_id,
+            cfg,
+            engine_defaults=engine_defaults,
+            app_defaults=app_defaults,
+            app_nodes=app_nodes,
+        )
         nodes[node_id] = NodeConfig(
             node_id=node_id,
             name=cfg["name"],
-            tool=cfg["tool"],
+            tool=tool,
+            model=model,
             prompt_file=prompt,
             prompt_file_auto=prompt_auto,
             output_file=cfg["output"],
@@ -169,10 +244,23 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
             extend_rules=node_extend_rules.get(node_id, []),
         )
 
+    if app_defaults.get("tool") or app_nodes:
+        logger.info(
+            "已合并业务侧 tool/model 覆盖（defaults.tool=%s, 节点覆盖数=%s）",
+            app_defaults.get("tool") or "(无)",
+            sum(
+                1
+                for nid, raw in app_nodes.items()
+                if isinstance(raw, dict) and (raw.get("tool") or raw.get("model"))
+            ),
+        )
+
     return WorkflowConfig(
         docs_dir=docs_dir,
         ai_rules_dir=ai_rules_dir,
         # app_root 仍作引擎侧兜底；sddl:start 用环境变量覆盖
         app_root=fallback_app_root,
         nodes=nodes,
+        default_tool=default_tool,
+        default_model=default_model,
     )

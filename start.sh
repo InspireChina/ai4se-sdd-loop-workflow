@@ -19,7 +19,8 @@ usage() {
 选项:
   -f, --file PATH     从文件读取需求（推荐）
   -n, --name NAME     需求目录名，产出落在 <应用根>/spec/<NAME>/（docs_dir 可配）
-  -t, --tool TOOL     覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo
+  -t, --tool TOOL     可选，覆盖全部节点 AI 工具（不传则用业务/引擎配置）
+  --model MODEL       可选，覆盖全部节点模型（不支持则降级为 tool 默认）
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
@@ -89,6 +90,7 @@ ensure_venv() {
 
 # ---------- parse args ----------
 TOOL=""
+MODEL=""
 DOCS_DIR=""
 REQ_NAME=""
 REQ_FILE=""
@@ -124,6 +126,11 @@ while [[ $# -gt 0 ]]; do
     -t|--tool)
       [[ $# -ge 2 ]] || die "--tool 需要参数"
       TOOL="$2"
+      shift 2
+      ;;
+    --model)
+      [[ $# -ge 2 ]] || die "--model 需要参数"
+      MODEL="$2"
       shift 2
       ;;
     -n|--name)
@@ -211,6 +218,9 @@ fi
 
 if [[ -n "$TOOL" ]]; then
   RUN_ARGS+=(--tool "$TOOL")
+fi
+if [[ -n "$MODEL" ]]; then
+  RUN_ARGS+=(--model "$MODEL")
 fi
 if [[ -n "$REQ_NAME" ]]; then
   RUN_ARGS+=(--name "$REQ_NAME")

@@ -32,6 +32,7 @@ class CursorTool(AITool):
         *,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
@@ -44,13 +45,18 @@ class CursorTool(AITool):
             "--approve-mcps",
             "--output-format",
             "text",
+            *self.model_cli_flags(model),
             launch,
         ]
 
         for binary in self._resolve_binaries():
             cmd = [binary, *cli_flags]
             try:
-                logger.info("调用 Cursor CLI (headless): %s ...", binary)
+                logger.info(
+                    "调用 Cursor CLI (headless): %s model=%s",
+                    binary,
+                    model or "(default)",
+                )
                 proc = subprocess.run(
                     cmd,
                     cwd=cwd,
@@ -92,17 +98,28 @@ class CursorTool(AITool):
         completion_check: CompletionCheck | None = None,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         launch = launch_read_prompt(prompt_file)
-        cli_flags = ["--trust", "--force", "--approve-mcps", launch]
+        cli_flags = [
+            "--trust",
+            "--force",
+            "--approve-mcps",
+            *self.model_cli_flags(model),
+            launch,
+        ]
 
         for binary in self._resolve_binaries():
             cmd = [binary, *cli_flags]
             try:
-                logger.info("交互调用 Cursor CLI: %s", binary)
+                logger.info(
+                    "交互调用 Cursor CLI: %s model=%s",
+                    binary,
+                    model or "(default)",
+                )
                 return run_interactive_subprocess(
                     cmd,
                     cwd,

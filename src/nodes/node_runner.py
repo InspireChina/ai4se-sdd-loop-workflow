@@ -70,11 +70,22 @@ class NodeRunner:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         interactive = node_cfg.mode == "interactive"
+        configured_model = (node_cfg.model or "").strip()
+        effective_model = configured_model
+        if node_cfg.tool == "echo" and configured_model:
+            logger.warning(
+                "节点 %s tool=echo 无模型概念，忽略 model=%s",
+                node_id,
+                configured_model,
+            )
+            effective_model = ""
 
         logger.info(
-            "节点 [%s] 使用工具 %s (%s) 开始执行",
+            "进入节点 [%s] (%s) tool=%s model=%s mode=%s",
             node_cfg.name,
+            node_id,
             node_cfg.tool,
+            effective_model or "(tool默认)",
             "interactive" if interactive else "headless",
         )
         if node_cfg.tool in ("cursor", "claude_code", "oh_my_pi", "omp"):
@@ -98,6 +109,7 @@ class NodeRunner:
                 completion_check=completion_check,
                 node_id=node_id,
                 prompt_dir=str(docs_dir),
+                model=effective_model or None,
             )
             # 交互结束仍未过门禁时打日志，避免「已 approved 却停住」难排查
             if node_id in _PHASE_NODE_IDS and not completion_check():
@@ -116,6 +128,7 @@ class NodeRunner:
                 cwd=str(agent_cwd),
                 node_id=node_id,
                 prompt_dir=str(docs_dir),
+                model=effective_model or None,
             )
             content, result = self._resolve_headless_content(
                 docs_dir, output_path, node_id, result
@@ -597,7 +610,9 @@ class NodeRunner:
         header = (
             f"# {node_cfg.name}\n\n"
             f"> 节点 ID: `{node_cfg.node_id}`\n"
-            f"> AI 工具: `{node_cfg.tool}`\n"
+            f"> AI 工具: `{node_cfg.tool}`"
+            + (f" model=`{node_cfg.model}`" if node_cfg.model else "")
+            + "\n"
             f"> 模式: `{node_cfg.mode}`\n"
             f"> 生成时间: {datetime.now().isoformat(timespec='seconds')}\n"
             f"> 执行状态: {'成功' if result.success else '需人工介入'}\n"

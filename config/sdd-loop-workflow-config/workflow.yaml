@@ -1,18 +1,34 @@
-# =============================================================================
-# SDD Loop Workflow — 业务项目运行时配置
-# =============================================================================
-# 位置：业务项目根 / sdd-loop-workflow-config / workflow.yaml
-# （由 sddl init 生成；按本仓库修改即可。）
-#
-# 业务项目根默认 = 本文件所在目录的上一级。
-# 使用 sddl start 时，还会用启动时的 cwd（写入环境变量），
-# 二者一致时无需再配 app_root。
-#
-# 节点 tool / prompt / mode 仍在引擎仓库 config/workflow.yaml，不要写在这里。
-# =============================================================================
-
-# 文档产出根目录（相对业务项目根）
-# 需求产出：<业务根>/<docs_dir>/<需求名>/
-# PRD 默认：<业务根>/<docs_dir>/requirements/
-# 默认 spec；可改成 docs 等任意相对路径
 docs_dir: spec
+
+defaults:
+  tool: claude_code
+  model: ""
+
+nodes:
+  analyze_requirements:
+    tool: claude_code
+    model: ""
+  create_plan:
+    tool: claude_code
+    model: ""
+  design_test_cases:
+    tool: claude_code
+    model: ""
+  review_plan_and_tests:
+    tool: claude_code
+    model: ""
+  split_tasks:
+    tool: claude_code
+    model: ""
+  implement_code:
+    tool: claude_code
+    model: ""
+  verify_tests:
+    tool: claude_code
+    model: ""
+  ai_review:
+    tool: claude_code
+    model: ""
+  commit_code:
+    tool: claude_code
+    model: ""

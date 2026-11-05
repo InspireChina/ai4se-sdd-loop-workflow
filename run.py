@@ -54,7 +54,19 @@ def main():
     parser.add_argument(
         "--tool",
         choices=["cursor", "claude_code", "oh_my_pi", "omp", "echo"],
-        help="覆盖所有节点的 AI 工具（调试用，修改 config/workflow.yaml 可永久配置）",
+        default=None,
+        help=(
+            "可选：覆盖所有节点的 AI 工具。"
+            "不传则使用 sdd-loop-workflow-config/workflow.yaml 与引擎配置合并结果"
+        ),
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "可选：覆盖所有节点的模型。"
+            "不传则使用配置；配置的 model 若该 tool 不支持则降级为 tool 默认"
+        ),
     )
     parser.add_argument(
         "--skip-clarification",
@@ -119,6 +131,15 @@ def main():
     if args.tool:
         for node in workflow.workflow_config.nodes.values():
             node.tool = args.tool
+        logging.info("CLI --tool=%s 已覆盖全部节点", args.tool)
+    if args.model is not None:
+        model = args.model.strip()
+        for node in workflow.workflow_config.nodes.values():
+            node.model = model
+        logging.info(
+            "CLI --model=%s 已覆盖全部节点",
+            model or "(空=各 tool 默认)",
+        )
 
     result = workflow.run(
         requirement=requirement,

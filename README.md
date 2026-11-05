@@ -29,9 +29,12 @@ Windows 默认过旧时，`init_env.cmd` 会优先 `py -3.14`…`-3.10`（跳过
 
 ```bash
 sddl init
-sddl start --tool cursor --file "/path/to/prd.md" --name login
-sddl start --tool cursor --name login --auto      # 无人值守
-sddl start --tool cursor --name login             # 续跑，勿加 --fresh
+# 在 sdd-loop-workflow-config/workflow.yaml 配好 defaults.tool 后，可不带 --tool：
+sddl start --file "/path/to/prd.md" --name login
+sddl start --name login --auto                    # 无人值守
+sddl start --name login                           # 续跑，勿加 --fresh
+# 调试或强制本环境工具时再带：
+sddl start --tool claude_code --file "/path/to/prd.md" --name login
 ```
 
 `sddl start` / `start.cmd` **绝不**执行 `pip install`；未安装时会提示先跑 `init_env`。
@@ -42,7 +45,8 @@ sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 | `--name` | 产出目录名（默认落在 `spec/<name>/`） |
 | `--auto` | 无人值守 |
 | `--fresh` | 清空该需求产出后重来 |
-| `--tool` | `cursor` / `claude_code` / `omp` / `echo` |
+| `--tool` | 可选；覆盖**全部**节点工具。不传则用业务/引擎配置 |
+| `--model` | 可选；覆盖全部节点模型。不传则用配置；原样传给对应 CLI（echo 等无模型概念的 tool 会忽略） |
 
 需要 **Python 3.10～3.14**（不含 3.15+）、**pip ≥ 21.3** 和已登录的 AI CLI。
 
@@ -53,7 +57,7 @@ sddl start --tool cursor --name login             # 续跑，勿加 --fresh
 ```text
 your-project/
 ├── sdd-loop-workflow-config/     # 业务配置（改这里）
-│   ├── workflow.yaml             # docs_dir 等运行时目录
+│   ├── workflow.yaml             # docs_dir + defaults.tool/model（覆盖引擎）
 │   ├── ai-rules.yaml             # 【核心】节点 → 扩展 md 映射
 │   └── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
 └── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
@@ -61,9 +65,11 @@ your-project/
 
 | 文件 | 作用 |
 |------|------|
-| `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + 工具引用 |
-| `workflow.yaml` | `docs_dir` 等运行时目录 |
-| `start-workflow` skill | 准备需求文件并拼装启动命令（见下）；**不在当前 AI 对话里执行** |
+| `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + MCP/Rules/Skills 引用 |
+| `workflow.yaml` | `docs_dir`；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
+| `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
+
+`sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 保留不覆盖**（避免冲掉项目节点映射）。
 
 跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
 
@@ -122,11 +128,11 @@ your-project/
 | 整条链路已完成（存在完成态的 `07-commit.md`） | 再 `sddl start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
 
 ```bash
-# 续跑（推荐始终带上 --name，与首次一致）
-sddl start --tool cursor --name login
+# 续跑（推荐始终带上 --name，与首次一致；tool 用业务配置）
+sddl start --name login
 
 # 仅当明确要清空该需求产出、从头再来
-sddl start --tool cursor --file "/path/to/prd.md" --name login --fresh
+sddl start --file "/path/to/prd.md" --name login --fresh
 ```
 
 ### 依据什么定位断点
@@ -205,10 +211,53 @@ nodes:
 | `docs_dir` | **禁止** stage/commit（含 `07-commit.md`） |
 | Action List | `04`「人工后续事项」→ `07`「后续 Action List」；须具体，无则写「无」 |
 
-### 其它业务配置：`workflow.yaml`
+### 业务 `workflow.yaml`：docs_dir + tool/model 覆盖
 
-| 配置项 | 作用 |
-|--------|------|
-| `docs_dir` | 文档产出根目录（相对业务项目根）。默认 `spec`；如 `spec/login/` |
+合并优先级：**业务 `nodes.<id>` > 业务 `defaults` > 引擎节点 > 引擎 `defaults`**。只配 `defaults.tool` 时，全部节点用该 tool。`prompt` / `mode` / `inputs` 仍在引擎 `config/workflow.yaml`。
 
-节点用的 tool / prompt / mode **不在这里配**，在引擎仓库的 `config/workflow.yaml`。
+```yaml
+docs_dir: spec
+
+defaults:
+  tool: claude_code
+  model: ""
+
+nodes:
+  analyze_requirements:
+    tool: claude_code
+    model: ""
+  create_plan:
+    tool: claude_code
+    model: ""
+  design_test_cases:
+    tool: claude_code
+    model: ""
+  review_plan_and_tests:
+    tool: claude_code
+    model: ""
+  split_tasks:
+    tool: claude_code
+    model: ""
+  implement_code:
+    tool: claude_code
+    model: ""
+  verify_tests:
+    tool: claude_code
+    model: ""
+  ai_review:
+    tool: claude_code
+    model: ""
+  commit_code:
+    tool: claude_code
+    model: ""
+```
+
+`model: ""` 表示使用该 tool 默认模型；按节点改 `tool` / `model` 即可。配置后 `sddl start` 可不带 `--tool`。
+
+| 启动方式 | 含义 |
+|----------|------|
+| `sddl start --file ...`（不带 `--tool`） | **推荐**：按业务配置（可按节点不同 tool/model） |
+| `sddl start --tool claude_code --file ...` | 强制覆盖**全部**节点的 tool（调试 / 临时换工具） |
+| `--model <名>` | 可选；覆盖全部节点 model |
+
+`start-workflow` skill：若读到业务已配 `defaults.tool`（或节点 tool），会给出 **A 不带 `--tool`（推荐）** 与 **B 带 `--tool`（强制本环境）** 两条并说明区别。

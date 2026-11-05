@@ -15,7 +15,9 @@ class EchoTool(AITool):
         *,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
+        del model  # echo 无模型概念
         content = (
             f"# Echo 模式输出\n\n"
             f"> 生成时间: {datetime.now().isoformat(timespec='seconds')}\n"
@@ -34,7 +36,9 @@ class EchoTool(AITool):
         completion_check=None,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
+        del model
         print("\n[echo] 交互澄清需要真实 AI CLI；echo 模式跳过交互会话。\n")
         return AIToolResult(
             content="",

@@ -40,6 +40,7 @@ class OhMyPiTool(AITool):
         *,
         node_id: str | None = None,
         prompt_dir: str | Path | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
@@ -53,7 +54,9 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        cmd = self._build_cmd(binary, prompt_file, headless=True, cwd=cwd)
+        cmd = self._build_cmd(
+            binary, prompt_file, headless=True, cwd=cwd, model=model
+        )
         self._log_launch_cmd(cmd)
         try:
             logger.info("调用 Oh My Pi CLI (headless): %s", binary)
@@ -99,6 +102,7 @@ class OhMyPiTool(AITool):
         completion_check: CompletionCheck | None = None,
         node_id: str | None = None,
         prompt_dir: str | Path | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
@@ -112,7 +116,9 @@ class OhMyPiTool(AITool):
                 message=f"Oh My Pi CLI (omp) 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        cmd = self._build_cmd(binary, prompt_file, headless=False, cwd=cwd)
+        cmd = self._build_cmd(
+            binary, prompt_file, headless=False, cwd=cwd, model=model
+        )
         self._log_launch_cmd(cmd)
         try:
             logger.info("交互调用 Oh My Pi CLI: %s", binary)
@@ -141,6 +147,7 @@ class OhMyPiTool(AITool):
         *,
         headless: bool,
         cwd: str,
+        model: str | None = None,
     ) -> list[str]:
         cmd: list[str] = [binary]
         project_root = cls._resolve_omp_project_root(cwd)
@@ -163,6 +170,7 @@ class OhMyPiTool(AITool):
             )
         else:
             cmd.append("--auto-approve")
+        cmd.extend(cls.model_cli_flags(model))
         cmd.append(cls._launch_prompt(prompt_file))
         return cmd
 

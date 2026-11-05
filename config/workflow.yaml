@@ -1,7 +1,7 @@
 # 引擎节点编排（tool / mode / prompt / inputs）。
-# docs_dir 等业务运行时配置已迁到业务根：
+# docs_dir、以及按项目覆盖的 tool/model 在业务根：
 #   <业务根>/sdd-loop-workflow-config/workflow.yaml
-# 由 sddl init 生成。
+# 由 sddl init 生成；业务侧 defaults / nodes.*.tool|model 会覆盖本文件。
 #
 # prompt      = 人工介入（需用户澄清 / review）
 # prompt_auto = 无人值守（--auto）；Python 按 flag 二选一注入，勿在同一文件里写条件分支
@@ -11,10 +11,15 @@ workflow:
   docs_dir: spec
   app_root: ..
 
+# 引擎级默认（可被业务 sdd-loop-workflow-config/workflow.yaml 覆盖）
+defaults:
+  tool: claude_code
+  # model: ""
+
 nodes:
   analyze_requirements:
     name: 需求分析与澄清
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/01_requirements.md
     prompt_auto: prompts/01_requirements.auto.md
@@ -26,7 +31,7 @@ nodes:
 
   create_plan:
     name: 制定计划
-    tool: cursor
+    tool: claude_code
     mode: headless
     prompt: prompts/02_create_plan.md
     prompt_auto: prompts/02_create_plan.auto.md
@@ -41,7 +46,7 @@ nodes:
 
   design_test_cases:
     name: 设计测试用例
-    tool: cursor
+    tool: claude_code
     mode: headless
     prompt: prompts/02_design_test_cases.md
     prompt_auto: prompts/02_design_test_cases.auto.md
@@ -55,7 +60,7 @@ nodes:
 
   review_plan_and_tests:
     name: 计划与测试用例评审
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/02_review_plan_and_tests.md
     prompt_auto: prompts/02_review_plan_and_tests.auto.md
@@ -74,7 +79,7 @@ nodes:
 
   split_tasks:
     name: 任务拆分
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/03_split_tasks.md
     prompt_auto: prompts/03_split_tasks.auto.md
@@ -92,7 +97,7 @@ nodes:
 
   implement_code:
     name: 代码实现
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/04_implement_code.md
     prompt_auto: prompts/04_implement_code.auto.md
@@ -108,7 +113,7 @@ nodes:
 
   verify_tests:
     name: 测试自验证
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/05_verify_tests.md
     prompt_auto: prompts/05_verify_tests.auto.md
@@ -120,7 +125,7 @@ nodes:
 
   ai_review:
     name: AI 代码评审
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/06_ai_review.md
     prompt_auto: prompts/06_ai_review.auto.md
@@ -129,7 +134,7 @@ nodes:
 
   commit_code:
     name: 提交代码
-    tool: cursor
+    tool: claude_code
     mode: interactive
     prompt: prompts/07_commit.md
     prompt_auto: prompts/07_commit.auto.md

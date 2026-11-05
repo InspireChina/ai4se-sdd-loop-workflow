@@ -30,13 +30,15 @@ class ClaudeCodeTool(AITool):
         *,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         launch = launch_read_prompt(prompt_file)
+        model_flags = self.model_cli_flags(model)
         for binary in ("claude", "claude-code"):
-            cmd = [binary, "--print", *_PERMISSION_FLAGS, launch]
+            cmd = [binary, "--print", *_PERMISSION_FLAGS, *model_flags, launch]
             try:
                 proc = subprocess.run(
                     cmd,
@@ -79,15 +81,21 @@ class ClaudeCodeTool(AITool):
         completion_check: CompletionCheck | None = None,
         node_id: str | None = None,
         prompt_dir: str | None = None,
+        model: str | None = None,
     ) -> AIToolResult:
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         launch = launch_read_prompt(prompt_file)
+        model_flags = self.model_cli_flags(model)
         for binary in ("claude", "claude-code"):
-            cmd = [binary, *_PERMISSION_FLAGS, launch]
+            cmd = [binary, *_PERMISSION_FLAGS, *model_flags, launch]
             try:
-                logger.info("交互调用 Claude Code CLI: %s", binary)
+                logger.info(
+                    "交互调用 Claude Code CLI: %s model=%s",
+                    binary,
+                    model or "(default)",
+                )
                 return run_interactive_subprocess(
                     cmd,
                     cwd,

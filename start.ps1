@@ -32,7 +32,8 @@ function Show-Usage {
         '选项:'
         '  -f, -file PATH          从文件读取需求（推荐）'
         '  -n, -name NAME          需求目录名'
-        '  -t, -tool TOOL          覆盖 AI 工具: cursor | claude_code | oh_my_pi | omp | echo'
+        '  -t, -tool TOOL          可选，覆盖全部节点 AI 工具（不传则用业务/引擎配置）'
+        '  -model MODEL            可选，覆盖全部节点模型'
         '  -d, -docs-dir DIR       覆盖完整产出目录'
         '  -skip-clarification     跳过需求澄清 loop'
         '  -auto                   无人值守'
@@ -129,6 +130,7 @@ $SkipClarification = $false
 $AutoMode = $false
 $Fresh = $false
 $Tool = ''
+$Model = ''
 $DocsDir = ''
 $ReqName = ''
 $ReqFile = ''
@@ -141,6 +143,7 @@ $optSkipClarification = @('-skip-clarification', '--skip-clarification')
 $optAuto = @('-auto', '--auto')
 $optFresh = @('-fresh', '--fresh')
 $optTool = @('-t', '-tool', '--tool')
+$optModel = @('-model', '--model')
 $optName = @('-n', '-name', '--name')
 $optDocsDir = @('-d', '-docs-dir', '--docs-dir')
 $optFile = @('-f', '-file', '--file')
@@ -167,6 +170,10 @@ while ($i -lt $tokens.Count) {
     } elseif ($optTool -contains $a) {
         if ($i + 1 -ge $tokens.Count) { Die '选项 -tool 需要参数' }
         $Tool = [string]$tokens[$i + 1]
+        $i += 2
+    } elseif ($optModel -contains $a) {
+        if ($i + 1 -ge $tokens.Count) { Die '选项 --model 需要参数' }
+        $Model = [string]$tokens[$i + 1]
         $i += 2
     } elseif ($optName -contains $a) {
         if ($i + 1 -ge $tokens.Count) { Die '选项 -name 需要参数' }
@@ -288,6 +295,7 @@ if ($ReqFile) {
     [void]$RunArgs.Add(($ReqText -join ' '))
 }
 if ($Tool) { [void]$RunArgs.Add('--tool'); [void]$RunArgs.Add($Tool) }
+if ($Model) { [void]$RunArgs.Add('--model'); [void]$RunArgs.Add($Model) }
 if ($ReqName) { [void]$RunArgs.Add('--name'); [void]$RunArgs.Add($ReqName) }
 if ($DocsDir) { [void]$RunArgs.Add('--docs-dir'); [void]$RunArgs.Add($DocsDir) }
 if ($SkipClarification) { [void]$RunArgs.Add('--skip-clarification') }

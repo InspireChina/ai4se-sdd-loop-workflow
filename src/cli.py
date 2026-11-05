@@ -14,6 +14,7 @@ from pathlib import Path
 
 SKILL_NAME = "start-workflow"
 APP_CONFIG_DIR_NAME = "sdd-loop-workflow-config"
+AI_RULES_CONFIG_FILENAME = "ai-rules.yaml"
 
 # 相对业务项目根 → (目录, --tool 取值)
 AGENT_SKILL_DIRS = {
@@ -141,11 +142,15 @@ def _engine_app_config_template(engine: Path) -> Path:
 
 
 def install_app_config(engine: Path, app_root: Path) -> list[str]:
-    """在业务根创建 sdd-loop-workflow-config（已存在的文件不覆盖）。"""
+    """在业务根同步 sdd-loop-workflow-config。
+
+    除已存在的 ``ai-rules.yaml`` 外，其余文件一律用引擎模板覆盖为最新。
+    """
     src_root = _engine_app_config_template(engine)
     dest_root = app_root / APP_CONFIG_DIR_NAME
     dest_root.mkdir(parents=True, exist_ok=True)
     actions: list[str] = []
+    preserve_names = {AI_RULES_CONFIG_FILENAME}
 
     for src in sorted(src_root.rglob("*")):
         if not src.is_file():
@@ -153,11 +158,12 @@ def install_app_config(engine: Path, app_root: Path) -> list[str]:
         rel = src.relative_to(src_root)
         dest = dest_root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        if dest.exists():
-            actions.append(f"跳过(已存在): {dest}")
+        if dest.exists() and dest.name in preserve_names:
+            actions.append(f"跳过(保留项目配置): {dest}")
             continue
+        existed = dest.exists()
         shutil.copy2(src, dest)
-        actions.append(f"已创建: {dest}")
+        actions.append(f"{'已覆盖' if existed else '已创建'}: {dest}")
 
     if not any(dest_root.rglob("*")):
         actions.append(f"已创建目录: {dest_root}")
@@ -168,8 +174,8 @@ def command_init(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="sddl init",
         description=(
-            "安装 start-workflow skill，并在业务根创建 sdd-loop-workflow-config"
-            "（含 workflow.yaml / ai-rules）"
+            "安装 start-workflow skill，并同步业务根 sdd-loop-workflow-config："
+            "除已有 ai-rules.yaml 外其余文件覆盖为引擎最新模板"
         ),
     )
     parser.add_argument("--app-root", type=Path, default=None, help="业务项目根")
