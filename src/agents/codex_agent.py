@@ -1,9 +1,12 @@
 """OpenAI Codex CLI 适配器。
 
 与 Claude / omp / Cursor 同一套路：长 prompt 落盘，argv 只传短「去读该文件」指令。
-Codex 默认沙箱绑 cwd，会读不到业务仓绝对路径，因此显式放大权限：
-- headless: ``codex exec --sandbox danger-full-access``
-- interactive: ``--dangerously-bypass-approvals-and-sandbox``（``--yolo``）
+
+Codex 差异：
+- ``-C`` 指到含 prompt 的 git 仓库根（或需求 docs 目录），保证相对路径可读
+- headless ``codex exec``：``--sandbox danger-full-access``，必要时 ``--skip-git-repo-check``
+- interactive ``codex``：``--dangerously-bypass-approvals-and-sandbox``
+  （交互态不支持 ``--skip-git-repo-check``）
 
 文档：https://developers.openai.com/codex/noninteractive
 """
@@ -18,13 +21,11 @@ from pathlib import Path
 
 from .base import AITool, AIToolResult, CompletionCheck
 from .interactive_runner import run_interactive_subprocess
-from .prompt_file import launch_read_prompt, save_node_prompt
+from .prompt_file import TEMP_PROMPT_DIR, save_node_prompt
 
 logger = logging.getLogger(__name__)
 
 _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin", Path.home() / ".npm-global" / "bin")
-
-# 与 Claude bypassPermissions / omp --auto-approve 对齐：允许读业务仓绝对路径上的 prompt
 _EXEC_SANDBOX_FLAGS = ("--sandbox", "danger-full-access")
 _INTERACTIVE_BYPASS_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
 
@@ -44,7 +45,8 @@ class CodexTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        workspace = self._workspace_root(prompt_file, cwd)
+        launch = self._launch_instruction(prompt_file, workspace)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -57,6 +59,8 @@ class CodexTool(AITool):
         cmd = [
             binary,
             "exec",
+            "-C",
+            str(workspace),
             *_EXEC_SANDBOX_FLAGS,
             "--skip-git-repo-check",
             *self.model_cli_flags(model),
@@ -64,13 +68,15 @@ class CodexTool(AITool):
         ]
         try:
             logger.info(
-                "调用 Codex CLI (headless): %s model=%s sandbox=danger-full-access",
+                "调用 Codex CLI (headless): %s model=%s -C=%s prompt=%s",
                 binary,
                 model or "(default)",
+                workspace,
+                prompt_file,
             )
             proc = subprocess.run(
                 cmd,
-                cwd=cwd,
+                cwd=str(workspace),
                 capture_output=True,
                 text=True,
                 timeout=600,
@@ -112,7 +118,8 @@ class CodexTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        workspace = self._workspace_root(prompt_file, cwd)
+        launch = self._launch_instruction(prompt_file, workspace)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -122,21 +129,28 @@ class CodexTool(AITool):
                 message=f"Codex CLI 不可用，prompt 已保存至 {prompt_file}",
             )
 
+        # 注意：interactive 不支持 --skip-git-repo-check
         cmd = [
             binary,
+            "-C",
+            str(workspace),
             *_INTERACTIVE_BYPASS_FLAGS,
             *self.model_cli_flags(model),
             launch,
         ]
         try:
             logger.info(
-                "交互调用 Codex CLI: %s model=%s (yolo/bypass)",
+                "交互调用 Codex CLI: %s model=%s -C=%s prompt=%s",
                 binary,
                 model or "(default)",
+                workspace,
+                prompt_file,
             )
+            print(f"[codex] workspace(-C): {workspace}", flush=True)
+            print(f"[codex] prompt file: {prompt_file.resolve()}", flush=True)
             return run_interactive_subprocess(
                 cmd,
-                cwd,
+                str(workspace),
                 tool_name=self.name,
                 banner_title="进入 Codex 交互会话",
                 completion_hint="产出文件写入后将自动退出并继续 workflow",
@@ -149,6 +163,31 @@ class CodexTool(AITool):
                 success=False,
                 message=f"Codex CLI 不可用，prompt 已保存至 {prompt_file}",
             )
+
+    @staticmethod
+    def _workspace_root(prompt_file: Path, cwd: str) -> Path:
+        """优先含 prompt 的 git 根；否则需求 docs 目录；再否则 cwd。"""
+        path = prompt_file.resolve()
+        for parent in (path.parent, *path.parents):
+            if (parent / ".git").exists():
+                return parent
+        if path.parent.name == TEMP_PROMPT_DIR:
+            return path.parent.parent
+        return Path(cwd).resolve()
+
+    @staticmethod
+    def _launch_instruction(prompt_file: Path, workspace: Path) -> str:
+        abs_path = prompt_file.resolve()
+        try:
+            rel_path = abs_path.relative_to(workspace.resolve())
+        except ValueError:
+            rel_path = abs_path
+        return (
+            "Read and follow ALL instructions in this file using your read tool "
+            f"(do NOT use @ to inline it):\n{rel_path}\n\n"
+            f"(Absolute path: {abs_path})\n\n"
+            "Execute everything described in that file completely."
+        )
 
     @staticmethod
     def _resolve_binary() -> str | None:
