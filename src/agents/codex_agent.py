@@ -1,9 +1,11 @@
 """OpenAI Codex CLI 适配器。
 
-非交互：`codex exec`（https://developers.openai.com/codex/noninteractive）
-交互：`codex` + 初始 prompt。
+与 Claude / omp / Cursor 同一套路：长 prompt 落盘，argv 只传短「去读该文件」指令。
+Codex 默认沙箱绑 cwd，会读不到业务仓绝对路径，因此显式放大权限：
+- headless: ``codex exec --sandbox danger-full-access``
+- interactive: ``--dangerously-bypass-approvals-and-sandbox``（``--yolo``）
 
-Prompt 写入 docs/<需求>/temp-prompts/ 后只把短指令放进 argv，避免 Windows 命令行超限。
+文档：https://developers.openai.com/codex/noninteractive
 """
 
 from __future__ import annotations
@@ -21,6 +23,10 @@ from .prompt_file import launch_read_prompt, save_node_prompt
 logger = logging.getLogger(__name__)
 
 _EXTRA_BIN_DIRS = (Path.home() / ".local" / "bin", Path.home() / ".npm-global" / "bin")
+
+# 与 Claude bypassPermissions / omp --auto-approve 对齐：允许读业务仓绝对路径上的 prompt
+_EXEC_SANDBOX_FLAGS = ("--sandbox", "danger-full-access")
+_INTERACTIVE_BYPASS_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
 
 
 class CodexTool(AITool):
@@ -51,15 +57,14 @@ class CodexTool(AITool):
         cmd = [
             binary,
             "exec",
-            "--sandbox",
-            "workspace-write",
+            *_EXEC_SANDBOX_FLAGS,
             "--skip-git-repo-check",
             *self.model_cli_flags(model),
             launch,
         ]
         try:
             logger.info(
-                "调用 Codex CLI (headless): %s model=%s",
+                "调用 Codex CLI (headless): %s model=%s sandbox=danger-full-access",
                 binary,
                 model or "(default)",
             )
@@ -117,10 +122,15 @@ class CodexTool(AITool):
                 message=f"Codex CLI 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        cmd = [binary, *self.model_cli_flags(model), launch]
+        cmd = [
+            binary,
+            *_INTERACTIVE_BYPASS_FLAGS,
+            *self.model_cli_flags(model),
+            launch,
+        ]
         try:
             logger.info(
-                "交互调用 Codex CLI: %s model=%s",
+                "交互调用 Codex CLI: %s model=%s (yolo/bypass)",
                 binary,
                 model or "(default)",
             )
