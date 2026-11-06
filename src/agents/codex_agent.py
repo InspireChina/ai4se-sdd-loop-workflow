@@ -46,7 +46,7 @@ class CodexTool(AITool):
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         workspace = self._workspace_root(prompt_file, cwd)
-        launch = self._launch_instruction(prompt_file, workspace)
+        launch = self._write_launch_sidecar(prompt_file, workspace)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -68,11 +68,12 @@ class CodexTool(AITool):
         ]
         try:
             logger.info(
-                "调用 Codex CLI (headless): %s model=%s -C=%s prompt=%s",
+                "调用 Codex CLI (headless): %s model=%s -C=%s prompt=%s launch=%s",
                 binary,
                 model or "(default)",
                 workspace,
                 prompt_file,
+                launch,
             )
             proc = subprocess.run(
                 cmd,
@@ -119,7 +120,7 @@ class CodexTool(AITool):
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         workspace = self._workspace_root(prompt_file, cwd)
-        launch = self._launch_instruction(prompt_file, workspace)
+        launch = self._write_launch_sidecar(prompt_file, workspace)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -140,14 +141,16 @@ class CodexTool(AITool):
         ]
         try:
             logger.info(
-                "交互调用 Codex CLI: %s model=%s -C=%s prompt=%s",
+                "交互调用 Codex CLI: %s model=%s -C=%s prompt=%s launch=%s",
                 binary,
                 model or "(default)",
                 workspace,
                 prompt_file,
+                launch,
             )
             print(f"[codex] workspace(-C): {workspace}", flush=True)
             print(f"[codex] prompt file: {prompt_file.resolve()}", flush=True)
+            print(f"[codex] argv prompt: {launch}", flush=True)
             return run_interactive_subprocess(
                 cmd,
                 str(workspace),
@@ -175,19 +178,24 @@ class CodexTool(AITool):
             return path.parent.parent
         return Path(cwd).resolve()
 
-    @staticmethod
-    def _launch_instruction(prompt_file: Path, workspace: Path) -> str:
+    @classmethod
+    def _write_launch_sidecar(cls, prompt_file: Path, workspace: Path) -> str:
+        """写入 workspace 内短指引文件，argv 只引用该文件名（避开 Windows 多行/长 argv 丢路径）。"""
         abs_path = prompt_file.resolve()
         try:
-            rel_path = abs_path.relative_to(workspace.resolve())
+            rel_path = abs_path.relative_to(workspace.resolve()).as_posix()
         except ValueError:
-            rel_path = abs_path
-        return (
+            rel_path = abs_path.as_posix()
+        sidecar = workspace.resolve() / ".sddl-codex-launch.md"
+        sidecar.write_text(
             "Read and follow ALL instructions in this file using your read tool "
-            f"(do NOT use @ to inline it):\n{rel_path}\n\n"
-            f"(Absolute path: {abs_path})\n\n"
-            "Execute everything described in that file completely."
+            f"(do NOT use @ to inline it):\n\n`{rel_path}`\n\n"
+            f"Absolute path: `{abs_path.as_posix()}`\n\n"
+            "Execute everything described in that file completely.\n",
+            encoding="utf-8",
         )
+        # 单行、短、无换行 —— Windows 上不易丢
+        return "Read .sddl-codex-launch.md and follow it completely."
 
     @staticmethod
     def _resolve_binary() -> str | None:
