@@ -1,12 +1,9 @@
 """OpenAI Codex CLI 适配器。
 
 与 Claude / omp / Cursor 同一套路：长 prompt 落盘，argv 只传短「去读该文件」指令。
-
-Codex 差异：
-- ``-C`` 指到含 prompt 的 git 仓库根（或需求 docs 目录），保证相对路径可读
-- headless ``codex exec``：``--sandbox danger-full-access``，必要时 ``--skip-git-repo-check``
-- interactive ``codex``：``--dangerously-bypass-approvals-and-sandbox``
-  （交互态不支持 ``--skip-git-repo-check``）
+差异仅两处：
+1. 启动指令必须是**单行**（Windows 转发多行 argv 时常只剩第一行，路径会丢）
+2. 放大权限并 ``-C`` 到含 prompt 的仓库根，保证能读到业务仓文件
 
 文档：https://developers.openai.com/codex/noninteractive
 """
@@ -30,6 +27,16 @@ _EXEC_SANDBOX_FLAGS = ("--sandbox", "danger-full-access")
 _INTERACTIVE_BYPASS_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
 
 
+def _launch_read_prompt_oneline(prompt_file: Path) -> str:
+    """与 launch_read_prompt 同义，但禁止换行，避免 Windows 子进程丢路径。"""
+    path = prompt_file.resolve().as_posix()
+    return (
+        "Read and follow ALL instructions in this file using your read tool "
+        f"(do NOT use @ to inline it): {path} "
+        "Execute everything described in that file completely."
+    )
+
+
 class CodexTool(AITool):
     name = "codex"
 
@@ -46,7 +53,7 @@ class CodexTool(AITool):
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         workspace = self._workspace_root(prompt_file, cwd)
-        launch = self._write_launch_sidecar(prompt_file, workspace)
+        launch = _launch_read_prompt_oneline(prompt_file)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -68,11 +75,10 @@ class CodexTool(AITool):
         ]
         try:
             logger.info(
-                "调用 Codex CLI (headless): %s model=%s -C=%s prompt=%s launch=%s",
+                "调用 Codex CLI (headless): %s model=%s -C=%s launch=%s",
                 binary,
                 model or "(default)",
                 workspace,
-                prompt_file,
                 launch,
             )
             proc = subprocess.run(
@@ -120,7 +126,7 @@ class CodexTool(AITool):
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
         workspace = self._workspace_root(prompt_file, cwd)
-        launch = self._write_launch_sidecar(prompt_file, workspace)
+        launch = _launch_read_prompt_oneline(prompt_file)
         binary = self._resolve_binary()
         if not binary:
             return AIToolResult(
@@ -130,7 +136,6 @@ class CodexTool(AITool):
                 message=f"Codex CLI 不可用，prompt 已保存至 {prompt_file}",
             )
 
-        # 注意：interactive 不支持 --skip-git-repo-check
         cmd = [
             binary,
             "-C",
@@ -141,16 +146,12 @@ class CodexTool(AITool):
         ]
         try:
             logger.info(
-                "交互调用 Codex CLI: %s model=%s -C=%s prompt=%s launch=%s",
+                "交互调用 Codex CLI: %s model=%s -C=%s launch=%s",
                 binary,
                 model or "(default)",
                 workspace,
-                prompt_file,
                 launch,
             )
-            print(f"[codex] workspace(-C): {workspace}", flush=True)
-            print(f"[codex] prompt file: {prompt_file.resolve()}", flush=True)
-            print(f"[codex] argv prompt: {launch}", flush=True)
             return run_interactive_subprocess(
                 cmd,
                 str(workspace),
@@ -169,7 +170,6 @@ class CodexTool(AITool):
 
     @staticmethod
     def _workspace_root(prompt_file: Path, cwd: str) -> Path:
-        """优先含 prompt 的 git 根；否则需求 docs 目录；再否则 cwd。"""
         path = prompt_file.resolve()
         for parent in (path.parent, *path.parents):
             if (parent / ".git").exists():
@@ -177,25 +177,6 @@ class CodexTool(AITool):
         if path.parent.name == TEMP_PROMPT_DIR:
             return path.parent.parent
         return Path(cwd).resolve()
-
-    @classmethod
-    def _write_launch_sidecar(cls, prompt_file: Path, workspace: Path) -> str:
-        """写入 workspace 内短指引文件，argv 只引用该文件名（避开 Windows 多行/长 argv 丢路径）。"""
-        abs_path = prompt_file.resolve()
-        try:
-            rel_path = abs_path.relative_to(workspace.resolve()).as_posix()
-        except ValueError:
-            rel_path = abs_path.as_posix()
-        sidecar = workspace.resolve() / ".sddl-codex-launch.md"
-        sidecar.write_text(
-            "Read and follow ALL instructions in this file using your read tool "
-            f"(do NOT use @ to inline it):\n\n`{rel_path}`\n\n"
-            f"Absolute path: `{abs_path.as_posix()}`\n\n"
-            "Execute everything described in that file completely.\n",
-            encoding="utf-8",
-        )
-        # 单行、短、无换行 —— Windows 上不易丢
-        return "Read .sddl-codex-launch.md and follow it completely."
 
     @staticmethod
     def _resolve_binary() -> str | None:

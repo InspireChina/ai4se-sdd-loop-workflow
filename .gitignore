@@ -15,7 +15,6 @@ build/**
 .omp/mcp.json
 .omp/config.yml
 .codex/
-.sddl-codex-launch.md
 
 # auth-service secrets & local data
 auth-service/.env
