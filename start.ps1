@@ -32,7 +32,7 @@ function Show-Usage {
         '选项:'
         '  -f, -file PATH          从文件读取需求（推荐）'
         '  -n, -name NAME          需求目录名'
-        '  -t, -tool TOOL          可选，覆盖全部节点 AI 工具（不传则用业务/引擎配置）'
+        '  -t, -tool TOOL          可选: cursor | claude_code | codex | omp | echo'
         '  -model MODEL            可选，覆盖全部节点模型'
         '  -d, -docs-dir DIR       覆盖完整产出目录'
         '  -skip-clarification     跳过需求澄清 loop'

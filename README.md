@@ -45,7 +45,7 @@ sddl start --tool claude_code --file "/path/to/prd.md" --name login
 | `--name` | 产出目录名（默认落在 `spec/<name>/`） |
 | `--auto` | 无人值守 |
 | `--fresh` | 清空该需求产出后重来 |
-| `--tool` | 可选；覆盖**全部**节点工具。不传则用业务/引擎配置 |
+| `--tool` | 可选；覆盖**全部**节点工具：`cursor` / `claude_code` / `codex` / `omp` / `echo`。不传则用业务/引擎配置 |
 | `--model` | 可选；覆盖全部节点模型。不传则用配置；原样传给对应 CLI（echo 等无模型概念的 tool 会忽略） |
 
 需要 **Python 3.10～3.14**（不含 3.15+）、**pip ≥ 21.3** 和已登录的 AI CLI。

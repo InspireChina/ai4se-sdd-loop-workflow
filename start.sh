@@ -19,7 +19,7 @@ usage() {
 选项:
   -f, --file PATH     从文件读取需求（推荐）
   -n, --name NAME     需求目录名，产出落在 <应用根>/spec/<NAME>/（docs_dir 可配）
-  -t, --tool TOOL     可选，覆盖全部节点 AI 工具（不传则用业务/引擎配置）
+  -t, --tool TOOL     可选，覆盖全部节点 AI 工具: cursor | claude_code | codex | omp | echo
   --model MODEL       可选，覆盖全部节点模型（不支持则降级为 tool 默认）
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
   --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
