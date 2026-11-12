@@ -20,6 +20,7 @@ AI_RULES_CONFIG_FILENAME = "ai-rules.yaml"
 AGENT_SKILL_DIRS = {
     "cursor": (".cursor/skills", "cursor"),
     "claude_code": (".claude/skills", "claude_code"),
+    "codex": (".codex/skills", "codex"),
     "omp": (".omp/skills", "omp"),
 }
 

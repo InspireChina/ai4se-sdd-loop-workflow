@@ -88,7 +88,13 @@ class NodeRunner:
             effective_model or "(tool默认)",
             "interactive" if interactive else "headless",
         )
-        if node_cfg.tool in ("cursor", "claude_code", "oh_my_pi", "omp"):
+        if node_cfg.tool in (
+            "cursor",
+            "claude_code",
+            "codex",
+            "oh_my_pi",
+            "omp",
+        ):
             logger.info(
                 "%s 将把渲染后的 prompt 写入 %s/temp-prompts/%s.prompt.md",
                 node_cfg.tool,

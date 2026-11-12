@@ -53,7 +53,7 @@ def main():
     )
     parser.add_argument(
         "--tool",
-        choices=["cursor", "claude_code", "oh_my_pi", "omp", "echo"],
+        choices=["cursor", "claude_code", "codex", "oh_my_pi", "omp", "echo"],
         default=None,
         help=(
             "可选：覆盖所有节点的 AI 工具。"
