@@ -107,12 +107,15 @@ pending_count: 1
 items:
   - id: T1
     category: task_scope
-    question: "待决策的具体问题"
+    question: "待决策的具体问题（用自然语言完整描述，禁止 d2/m0 等内部编号或缩写代号）"
     why_it_matters: "为什么需要用户决策"
-    suggestion: "你的倾向或各方案利弊"
+    suggestion: "你的倾向或各方案利弊（具体内容，不要用编号代指）"
+    suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或仓库现状一致性 / 权衡了什么"
     status: pending
     answer: ""
 ```
+
+**澄清项规范**：`suggestion` 必须配 `suggestion_reason` 写明推荐依据；`question`/`suggestion`/`suggestion_reason`/`answer` 全部用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明。
 
 拿不准必问。写入 `{{draft_output_path}}`。
 
@@ -121,6 +124,8 @@ items:
 若 `skip_clarification` 或已 `all_resolved`，进入阶段 3。
 
 逐条呈现 pending，请用户选择；决策后立即更新 checklist；新歧义追加条目。全部 resolved 后进入阶段 3。
+
+**澄清/提问规范**：向用户呈现时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明，让用户无需查资料即可理解）；给出推荐项必须同时写明推荐原因（依据哪条规则 / 与现网一致性 / 权衡了什么），不得只给结论。
 
 ### 阶段 3：任务定稿
 

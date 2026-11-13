@@ -51,9 +51,10 @@ pending_count: 1
 items:
   - id: D1
     category: tech_stack
-    question: "待 review 确认的问题"
+    question: "待 review 确认的问题（用自然语言完整描述，禁止 d2/m0 等内部编号或缩写代号）"
     why_it_matters: "..."
-    suggestion: "倾向方案（须可被无人值守直接采纳）"
+    suggestion: "倾向方案（须可被无人值守直接采纳；具体内容，不要用编号代指）"
+    suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或仓库现状一致性 / 权衡了什么"
     status: pending
     answer: ""
 ```

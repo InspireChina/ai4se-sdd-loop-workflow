@@ -40,5 +40,5 @@
 1. 覆盖验收标准：`TC-UNIT-*`、`TC-API-*`，可追溯
 2. 用例总览、明细、追溯关系齐全
 3. `test_cases_approval` 保持 `pending`
-4. 不确定项写入待 review 清单（每条带清晰 `suggestion`）
+4. 不确定项写入待 review 清单（每条带清晰 `suggestion` 并配 `suggestion_reason` 写明推荐依据；用自然语言完整描述，禁止 `d2`/`m0` 等代号指代模块/规则/配置，须写全名 + 一句话说明）
 5. 直接写入 `02-test-cases.md`；完整内容经写文件工具写入 `{{final_output_path}}`

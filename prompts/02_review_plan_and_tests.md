@@ -88,6 +88,7 @@
 
 1. 读取 `02-plan.md`、`02-test-cases.md` 中的 `clarification_checklist`
 2. 若存在 `status: pending`：在 CLI 中逐条与用户澄清；每确认一项立即回写对应文件（`resolved` + `answer`，更新 `all_resolved` / `pending_count`）
+   - **澄清/提问规范**：向用户呈现问题时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明，让用户无需查资料即可理解）；给出推荐项必须同时写明推荐原因（依据哪条规则 / 与现网一致性 / 权衡了什么），不得只给结论
 3. 若某项须在交叉比对后再定，可并入阶段 1 的 review 清单，并注明已承接
 4. **仅当**两侧无残留 pending（或已全部转入 review 清单）后，才进入阶段 1
 
@@ -105,9 +106,10 @@ pending_count: 1
 items:
   - id: R1
     category: coverage | scenario | scope | test_strategy
-    question: "业务或覆盖不一致点（用人话描述用户场景）"
+    question: "业务或覆盖不一致点（用人话描述用户场景，禁止 d2/m0 等内部编号或缩写代号）"
     why_it_matters: "对验收或测试范围的影响"
-    suggestion: "建议的统一业务口径或覆盖策略"
+    suggestion: "建议的统一业务口径或覆盖策略（具体内容，不要用编号代指）"
+    suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或验收一致性 / 权衡了什么"
     status: pending
     answer: ""
 ```
@@ -119,6 +121,7 @@ items:
 ### 阶段 2：与用户澄清比对缺口
 
 1. 在 CLI 中逐条确认 draft 清单；每确认一项更新 `resolved` + `answer`
+   - **澄清/提问规范**：向用户呈现时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明）；给出推荐项必须同时写明推荐原因（依据 / 与现网一致性 / 权衡），不得只给结论
 2. 全部 resolved 后进入阶段 3
 
 ### 阶段 3：同步修订 plan 与 test-cases
