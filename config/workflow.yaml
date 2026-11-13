@@ -10,8 +10,6 @@
 workflow:
   docs_dir: spec
   app_root: ..
-  # 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐，不打断用户。默认 0.8。
-  recommendation_threshold: 0.8
 
 # 引擎级默认（可被业务 sdd-loop-workflow-config/workflow.yaml 覆盖）
 defaults:
