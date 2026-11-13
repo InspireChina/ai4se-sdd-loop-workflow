@@ -63,14 +63,18 @@ pending_count: 2
 items:
   - id: Q1
     category: scope
-    question: "待澄清的具体问题"
+    question: "待澄清的具体问题（用自然语言完整描述，禁止使用 d2/m0 等内部编号或缩写代号）"
     why_it_matters: "为什么需要确认"
-    suggestion: "建议的默认选项或倾向"
+    suggestion: "建议的默认选项或倾向（具体内容，不要用编号代指）"
+    suggestion_reason: "为什么推荐这个选项：依据 / 权衡 / 与现网或规则的一致性"
     status: pending
     answer: ""
 ```
 
 规则：唯一 `id`；`pending_count` 等于 pending 条数；无歧义时 `items: []`、`all_resolved: true`。
+
+- **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
+- **所有字段必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等代号；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
 YAML 之后输出 Markdown 正文。写入 `{{draft_output_path}}`。
 
@@ -81,7 +85,7 @@ YAML 之后输出 Markdown 正文。写入 `{{draft_output_path}}`。
 对每条 `pending`：
 
 1. 按优先级裁决：`ai-rules` → 本 prompt → `suggestion` → 与需求原文/现网最一致的方案
-2. 立即回写 `status: resolved` + `answer`（写明依据，如「按 ai-rules …」）
+2. 立即回写 `status: resolved` + `answer`（写明依据，如「按 ai-rules …」）；**`answer` 必须用自然语言完整描述**，禁止用 `d2`/`m0` 等内部编号或缩写代号指代模块/规则/配置，需写出全名与一句话说明
 3. 更新 `pending_count`、`all_resolved`
 4. 若自决引入新歧义，追加条目后同样自行 resolved
 
@@ -119,6 +123,7 @@ items:
     question: "..."
     why_it_matters: "..."
     suggestion: "..."
+    suggestion_reason: "..."
     status: resolved
     answer: "无人值守：按 ai-rules / suggestion …"
 ```

@@ -78,9 +78,10 @@ pending_count: 2
 items:
   - id: Q1
     category: scope
-    question: "待澄清的具体问题"
+    question: "待澄清的具体问题（用自然语言完整描述，禁止使用 d2/m0 等内部编号或缩写代号）"
     why_it_matters: "为什么需要确认"
-    suggestion: "建议的默认选项或倾向"
+    suggestion: "建议的默认选项或倾向（具体内容，不要用编号代指）"
+    suggestion_reason: "为什么推荐这个选项：依据 / 权衡 / 与现网或规则的一致性"
     status: pending
     answer: ""
 ```
@@ -91,6 +92,8 @@ items:
 - `status` 只能是 `pending` 或 `resolved`
 - 若无待澄清项：`items: []`、`pending_count: 0`、`all_resolved: true`
 - `pending_count` 必须等于 `status: pending` 的条目数
+- **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
+- **面向用户的所有字段（`question` / `suggestion` / `suggestion_reason` / `answer`）必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法直接看懂的标识；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
 YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、范围、角色场景、功能/非功能需求、变更影响、验收标准等章节）。
 
@@ -103,6 +106,8 @@ YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、�
 **在同一会话中循环执行，不要要求用户退出 CLI：**
 
 1. 逐条列出 `status: pending` 的问题，与用户讨论；允许确认、修改、拒绝或补充
+   - **面向用户展示时必须用自然语言完整描述**：禁止直接抛出 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识；若问题涉及某模块/某条规则/某项配置，**直接写出其全名 + 一句话说明**，再附 `suggestion` 与 `suggestion_reason`，让用户无需查阅任何资料即可理解并决策
+   - 展示推荐项时**必须同时给出推荐原因**（`suggestion_reason`），不得只给"建议选 A"而不说为什么
 2. 用户给出回答后，**立即**更新初稿 `{{draft_output_path}}` 顶部的 `clarification_checklist`：
    - 已确认项：`status: resolved`，`answer` 写入用户最终结论
    - 同步更新 `pending_count`、`all_resolved`
@@ -146,6 +151,7 @@ items:
     question: "..."
     why_it_matters: "..."
     suggestion: "..."
+    suggestion_reason: "..."
     status: resolved
     answer: "用户最终确认"
 ```
