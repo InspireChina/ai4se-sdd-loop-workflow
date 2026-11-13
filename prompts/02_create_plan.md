@@ -73,12 +73,14 @@ items:
     why_it_matters: "..."
     suggestion: "倾向方案（具体内容，不要用编号代指）"
     suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或仓库现状一致性 / 权衡了什么"
+    suggestion_confidence: 0.0
     status: pending
     answer: ""
 ```
 
 **澄清项规范（本节点产出将交 review 节点呈现给用户）**：
 - `suggestion` 必须配 `suggestion_reason`，写明推荐依据，不得只给结论
+- `suggestion_confidence`（0-1 浮点）：推荐为正确方案的把握，无法评估写 `0.0`；当前阈值 `{{recommendation_threshold}}`，review 节点对 `>= 阈值` 的项将自动采纳、不再问用户
 - `question` / `suggestion` / `suggestion_reason` / `answer` 全部用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明
 
 4. 文档**必须**包含：

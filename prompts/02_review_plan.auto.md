@@ -66,7 +66,7 @@
 
 1. 读取 `02-plan.md` 中的 `clarification_checklist`
 2. 对每条 `pending`：按 `ai-rules` → 本 prompt → `suggestion` 立刻拍板，回写 `resolved` + `answer`（写明依据），更新为 `all_resolved: true`
-   - **自决结论规范**：`answer` 须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等代号指代模块/规则/配置（须写全名 + 一句话说明）；依据须具体可追溯
+   - **自决结论规范**：`answer` 须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等代号指代模块/规则/配置（须写全名 + 一句话说明）；依据须具体可追溯。`suggestion_confidence` 仅作可追溯标记，无人值守模式下全部自决
 3. 须在 review 后再定的 plan 问题可并入阶段 1 清单，但须注明已承接；**禁止**把项继续留在 pending 等人
 4. plan 无残留 pending（或已转入 review 清单且将在本节点消解）后进入阶段 1
 
@@ -78,7 +78,7 @@
 
 ### 阶段 2：自决 review 缺口（禁止提问）
 
-对 draft 每条 pending 按同一优先级裁决，写回 `resolved` + `answer`，不得残留 pending。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。全部 resolved 后进入阶段 3。
+对 draft 每条 pending 按同一优先级裁决，写回 `resolved` + `answer`，不得残留 pending。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。`suggestion_confidence` 仅作可追溯标记。全部 resolved 后进入阶段 3。
 
 ### 阶段 3：同步修订 plan
 

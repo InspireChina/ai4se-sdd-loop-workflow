@@ -82,7 +82,8 @@
 ### 阶段 0：消化 plan 中的 pending（必须先做）
 
 1. 读取 `02-plan.md` 中的 `clarification_checklist`
-2. 若存在 `status: pending`：在 CLI 中逐条与用户澄清；每确认一项立即回写 `02-plan.md`（`resolved` + `answer`，更新 `all_resolved` / `pending_count`）
+2. 若存在 `status: pending`：在 CLI 中逐条澄清；每确认一项立即回写 `02-plan.md`（`resolved` + `answer`，更新 `all_resolved` / `pending_count`）
+   - **推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，直接采纳推荐方案（`resolved` + `answer` = 推荐 + 依据，注明「按推荐强度自动采纳」），**不要**就该项询问用户；仅 `suggestion_confidence < 阈值`（或为 0）时才与用户确认
    - **澄清/提问规范**：向用户呈现问题时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明，让用户无需查资料即可理解）；给出推荐项必须同时写明推荐原因（依据哪条规则 / 与现网一致性 / 权衡了什么），不得只给结论
 3. 若某项须在 plan review 后再定，可并入阶段 1 的 review 清单，并注明已承接
 4. **仅当** plan 无残留 pending（或已全部转入 review 清单）后，才进入阶段 1
@@ -105,6 +106,7 @@ items:
     why_it_matters: "对可行性/范围/契约的影响"
     suggestion: "建议的统一口径或方案（具体内容，不要用编号代指）"
     suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或仓库现状一致性 / 权衡了什么"
+    suggestion_confidence: 0.0
     status: pending
     answer: ""
 ```
@@ -114,6 +116,7 @@ items:
 ### 阶段 2：与用户澄清 review 缺口
 
 1. 在 CLI 中逐条确认 draft 清单；每确认一项更新 `resolved` + `answer`
+   - **推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，直接采纳推荐方案（`resolved` + `answer` = 推荐 + 依据，注明「按推荐强度自动采纳」），**不要**就该项询问用户；仅 `suggestion_confidence < 阈值`（或为 0）时才与用户确认
    - **澄清/提问规范**：向用户呈现时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明）；给出推荐项必须同时写明推荐原因（依据 / 与现网一致性 / 权衡），不得只给结论
 2. 全部 resolved 后进入阶段 3
 

@@ -575,6 +575,10 @@ class NodeRunner:
             app_root=state.get("app_root") or self.workflow_config.app_root,
         )
 
+        context["recommendation_threshold"] = str(
+            self.workflow_config.recommendation_threshold
+        )
+
         return context
 
     @staticmethod

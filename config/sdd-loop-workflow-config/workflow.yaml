@@ -1,5 +1,9 @@
 docs_dir: spec
 
+# 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐方案，不打断用户。
+# 范围 [0, 1]，默认 0.8；调低则更多项自动采纳、更少打断，调高则更多项需用户确认。
+recommendation_threshold: 0.8
+
 defaults:
   tool: claude_code
   model: ""

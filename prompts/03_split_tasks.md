@@ -111,11 +111,12 @@ items:
     why_it_matters: "为什么需要用户决策"
     suggestion: "你的倾向或各方案利弊（具体内容，不要用编号代指）"
     suggestion_reason: "为什么推荐：依据哪条规则 / 与现网或仓库现状一致性 / 权衡了什么"
+    suggestion_confidence: 0.0
     status: pending
     answer: ""
 ```
 
-**澄清项规范**：`suggestion` 必须配 `suggestion_reason` 写明推荐依据；`question`/`suggestion`/`suggestion_reason`/`answer` 全部用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明。
+**澄清项规范**：`suggestion` 必须配 `suggestion_reason` 写明推荐依据；`suggestion_confidence`（0-1 浮点，推荐把握，无法评估写 `0.0`，当前阈值 `{{recommendation_threshold}}`，`>= 阈值` 的项将自动采纳、不再问用户）；`question`/`suggestion`/`suggestion_reason`/`answer` 全部用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明。
 
 拿不准必问。写入 `{{draft_output_path}}`。
 
@@ -124,6 +125,8 @@ items:
 若 `skip_clarification` 或已 `all_resolved`，进入阶段 3。
 
 逐条呈现 pending，请用户选择；决策后立即更新 checklist；新歧义追加条目。全部 resolved 后进入阶段 3。
+
+**推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，直接采纳推荐方案（`resolved` + `answer` = 推荐 + 依据，注明「按推荐强度自动采纳」），**不要**就该项询问用户；仅 `suggestion_confidence < 阈值`（或为 0）时才与用户确认。
 
 **澄清/提问规范**：向用户呈现时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明，让用户无需查资料即可理解）；给出推荐项必须同时写明推荐原因（依据哪条规则 / 与现网一致性 / 权衡了什么），不得只给结论。
 

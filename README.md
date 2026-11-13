@@ -66,7 +66,7 @@ your-project/
 | 文件 | 作用 |
 |------|------|
 | `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + MCP/Rules/Skills 引用 |
-| `workflow.yaml` | `docs_dir`；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
+| `workflow.yaml` | `docs_dir`；`recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
 | `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
 
 `sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 保留不覆盖**（避免冲掉项目节点映射）。
@@ -225,8 +225,13 @@ nodes:
 
 合并优先级：**业务 `nodes.<id>` > 业务 `defaults` > 引擎节点 > 引擎 `defaults`**。只配 `defaults.tool` 时，全部节点用该 tool。`prompt` / `mode` / `inputs` 仍在引擎 `config/workflow.yaml`。
 
+**`recommendation_threshold`（推荐强度阈值，默认 0.8）**：澄清项的 `suggestion_confidence >= 该值` 时自动采纳推荐方案、不打断用户；低于阈值才问用户。调低 → 更多项自动采纳、更少打断；调高 → 更多项需用户确认。范围 `[0, 1]`，`sddl init` 初始化为 0.8。
+
 ```yaml
 docs_dir: spec
+
+# 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐，不打断用户。默认 0.8。
+recommendation_threshold: 0.8
 
 defaults:
   tool: claude_code

@@ -56,6 +56,8 @@ class WorkflowConfig:
     app_root: str = ".."
     default_tool: str = DEFAULT_TOOL
     default_model: str = ""
+    # 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐，不打断用户；默认 0.8
+    recommendation_threshold: float = 0.8
 
 
 def _parse_input(raw: dict[str, str]) -> NodeInput:
@@ -201,6 +203,11 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         or DEFAULT_DOCS_DIR
     ).strip() or DEFAULT_DOCS_DIR
 
+    recommendation_threshold = _resolve_recommendation_threshold(
+        app_settings.get("recommendation_threshold"),
+        engine_workflow.get("recommendation_threshold"),
+    )
+
     app_defaults = app_settings.get("defaults") or {}
     if not isinstance(app_defaults, dict):
         app_defaults = {}
@@ -263,4 +270,19 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         nodes=nodes,
         default_tool=default_tool,
         default_model=default_model,
+        recommendation_threshold=recommendation_threshold,
     )
+
+
+def _resolve_recommendation_threshold(*candidates: Any) -> float:
+    """业务 workflow.yaml > 引擎 workflow.yaml > 默认 0.8；clamp 到 [0, 1]。"""
+    default = 0.8
+    for raw in candidates:
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        return max(0.0, min(1.0, value))
+    return default

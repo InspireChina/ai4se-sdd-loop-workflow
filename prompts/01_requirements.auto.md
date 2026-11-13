@@ -67,6 +67,7 @@ items:
     why_it_matters: "为什么需要确认"
     suggestion: "建议的默认选项或倾向（具体内容，不要用编号代指）"
     suggestion_reason: "为什么推荐这个选项：依据 / 权衡 / 与现网或规则的一致性"
+    suggestion_confidence: 0.0
     status: pending
     answer: ""
 ```
@@ -74,6 +75,7 @@ items:
 规则：唯一 `id`；`pending_count` 等于 pending 条数；无歧义时 `items: []`、`all_resolved: true`。
 
 - **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
+- **`suggestion_confidence`（0-1 浮点）**：表示推荐为正确方案的把握；无法评估写 `0.0`。无人值守模式下全部自决，此值仅作可追溯标记
 - **所有字段必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等代号；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
 YAML 之后输出 Markdown 正文。写入 `{{draft_output_path}}`。
@@ -124,6 +126,7 @@ items:
     why_it_matters: "..."
     suggestion: "..."
     suggestion_reason: "..."
+    suggestion_confidence: 0.0
     status: resolved
     answer: "无人值守：按 ai-rules / suggestion …"
 ```
