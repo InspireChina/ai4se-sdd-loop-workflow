@@ -40,6 +40,8 @@ class NodeConfig:
     model: str = ""  # 空 = 该 tool 自带默认模型
     inputs: list[NodeInput] = field(default_factory=list)
     extend_rules: list[str] = field(default_factory=list)
+    # 推荐强度阈值（0-1）：本节点 suggestion_confidence >= 该值时自动采纳推荐，不打断用户
+    recommendation_threshold: float = 0.8
 
     def resolve_prompt_file(self, auto: bool) -> str:
         """按是否 --auto 选择人工介入 / 无人值守 prompt。"""
@@ -238,6 +240,12 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
             app_defaults=app_defaults,
             app_nodes=app_nodes,
         )
+        node_threshold = _resolve_node_recommendation_threshold(
+            node_id,
+            app_nodes=app_nodes,
+            engine_node_cfg=cfg,
+            global_threshold=recommendation_threshold,
+        )
         nodes[node_id] = NodeConfig(
             node_id=node_id,
             name=cfg["name"],
@@ -249,6 +257,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
             mode=cfg.get("mode", "headless"),
             inputs=[_parse_input(i) for i in cfg.get("inputs", [])],
             extend_rules=node_extend_rules.get(node_id, []),
+            recommendation_threshold=node_threshold,
         )
 
     if app_defaults.get("tool") or app_nodes:
@@ -286,3 +295,30 @@ def _resolve_recommendation_threshold(*candidates: Any) -> float:
             continue
         return max(0.0, min(1.0, value))
     return default
+
+
+def _resolve_node_recommendation_threshold(
+    node_id: str,
+    *,
+    app_nodes: dict[str, Any],
+    engine_node_cfg: dict[str, Any],
+    global_threshold: float,
+) -> float:
+    """单节点阈值：业务节点 > 引擎节点 > 全局默认；clamp 到 [0, 1]。"""
+    app_node = app_nodes.get(node_id)
+    if not isinstance(app_node, dict):
+        app_node = {}
+    candidates = (
+        app_node.get("recommendation_threshold"),
+        engine_node_cfg.get("recommendation_threshold"),
+        global_threshold,
+    )
+    for raw in candidates:
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        return max(0.0, min(1.0, value))
+    return max(0.0, min(1.0, global_threshold))

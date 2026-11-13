@@ -225,12 +225,16 @@ nodes:
 
 合并优先级：**业务 `nodes.<id>` > 业务 `defaults` > 引擎节点 > 引擎 `defaults`**。只配 `defaults.tool` 时，全部节点用该 tool。`prompt` / `mode` / `inputs` 仍在引擎 `config/workflow.yaml`。
 
-**`recommendation_threshold`（推荐强度阈值，默认 0.8）**：澄清项的 `suggestion_confidence >= 该值` 时自动采纳推荐方案、不打断用户；低于阈值才问用户。调低 → 更多项自动采纳、更少打断；调高 → 更多项需用户确认。范围 `[0, 1]`，`sddl init` 初始化为 0.8。
+**`recommendation_threshold`（推荐强度阈值，默认 0.8，每节点可单独覆盖）**：澄清项的 `suggestion_confidence >= 该值` 时自动采纳推荐方案、不打断用户；低于阈值才问用户。调低 → 更多项自动采纳、更少打断；调高 → 更多项需用户确认。范围 `[0, 1]`。
+
+- 顶层 `recommendation_threshold` 为全局默认；`nodes.<id>.recommendation_threshold` 单独覆盖该节点。
+- 解析优先级：**业务节点 > 引擎节点 > 业务全局 > 引擎全局 > 0.8**。
+- `sddl init` 初始化时每个节点都写入 `0.8`，按需逐节点调。
 
 ```yaml
 docs_dir: spec
 
-# 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐，不打断用户。默认 0.8。
+# 推荐强度阈值（全局默认，0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐，不打断用户。默认 0.8。
 recommendation_threshold: 0.8
 
 defaults:
@@ -241,30 +245,39 @@ nodes:
   analyze_requirements:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8   # 本节点覆盖全局默认（0-1）
   create_plan:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   design_test_cases:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   review_plan:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.9   # 例：计划评审更严格，更多项需用户确认
   split_tasks:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.75  # 例：任务拆分更宽松，更多项自动采纳
   implement_code:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   verify_tests:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   ai_review:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   commit_code:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
 ```
 
 `model: ""` 表示使用该 tool 默认模型；按节点改 `tool` / `model` 即可。配置后 `sddl start` 可不带 `--tool`。

@@ -576,7 +576,7 @@ class NodeRunner:
         )
 
         context["recommendation_threshold"] = str(
-            self.workflow_config.recommendation_threshold
+            node_cfg.recommendation_threshold
         )
 
         return context

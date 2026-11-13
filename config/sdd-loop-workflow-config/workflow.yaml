@@ -1,7 +1,8 @@
 docs_dir: spec
 
-# 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐方案，不打断用户。
+# 推荐强度阈值（全局默认，0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐方案，不打断用户。
 # 范围 [0, 1]，默认 0.8；调低则更多项自动采纳、更少打断，调高则更多项需用户确认。
+# 每个节点可在下方 nodes.<id>.recommendation_threshold 单独覆盖此默认值。
 recommendation_threshold: 0.8
 
 defaults:
@@ -12,27 +13,36 @@ nodes:
   analyze_requirements:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   create_plan:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   design_test_cases:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   review_plan:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   split_tasks:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   implement_code:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   verify_tests:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   ai_review:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
   commit_code:
     tool: claude_code
     model: ""
+    recommendation_threshold: 0.8
