@@ -7,116 +7,90 @@
 #
 # ---------- 作用 ----------
 # 各交互/并行节点在填写 clarification_checklist 时，需为每条 suggestion 评估
-# suggestion_confidence（0-1 浮点）。本文件定义每个节点的打分规则，经
+# suggestion_confidence（0-1 浮点）。本文件定义每个节点的定性把握规则，经
 # {{suggestion_confidence_rules}} 注入对应节点 prompt。
 #
-# ---------- 打分公式 ----------
-#   confidence = clamp(base_score + Σ(add_rules.points) − Σ(subtract_rules.points), 0, 1)
-#
+# ---------- 用法（定性，无公式） ----------
+# 规则只标方向，不给分值：
+#   high_confidence_rules : 命中则「把握更高」的条件
+#   low_confidence_rules  : 命中则「把握更低」的条件
 # 每条规则：
 #   condition : 触发条件（自然语言描述，AI 据此判断是否命中）
-#   points     : 分值（正数）；add_rules 加分、subtract_rules 减分
-#   reason     : 为什么这条影响置信度（AI 在 suggestion_reason 里可引用）
+#   reason     : 为什么这条影响把握（AI 在 suggestion_reason 里可引用）
+#
+# AI 综合命中的高/低把握规则，自行给出 0-1 的 suggestion_confidence，并在
+# suggestion_reason 注明命中的规则依据。无硬性公式，避免假精确。
 #
 # ---------- 合并策略 ----------
-# 业务文件中某节点若配置了 base_score，则覆盖引擎基线；
-# add_rules / subtract_rules 则**叠加**到引擎基线之后（引擎通用 + 项目扩展）。
-# 业务文件留空或不配某节点 = 该节点仅用引擎通用规则。
+# high_confidence_rules / low_confidence_rules 均为**叠加**到引擎基线之后
+# （引擎通用 + 项目扩展）。业务文件留空或不配某节点 = 该节点仅用引擎通用规则。
 # =============================================================================
 
 nodes:
   analyze_requirements:
     description: 需求分析与澄清
-    base_score: 0.5
-    add_rules:
+    high_confidence_rules:
       - condition: "需求原文已明确给出该问题的答案"
-        points: 0.3
         reason: "原文明确 = 无歧义，推荐把握高"
       - condition: "ai-rules 中有直接对应条款可裁决"
-        points: 0.2
         reason: "有项目规范背书，推荐可靠"
       - condition: "现网现状/历史实现已印证该方案"
-        points: 0.2
         reason: "有现网依据，推荐把握高"
-    subtract_rules:
+    low_confidence_rules:
       - condition: "涉及跨模块/跨服务影响，需现网确认"
-        points: 0.2
         reason: "影响面大，单方推断风险高"
       - condition: "需求类型为 existing_change 且涉及历史兼容"
-        points: 0.1
         reason: "兼容性不确定性降低把握"
       - condition: "涉及安全/权限/数据迁移"
-        points: 0.2
         reason: "高风险领域，不宜高置信自决"
 
   create_plan:
     description: 制定计划（并行 headless 初稿）
-    base_score: 0.4
-    add_rules:
+    high_confidence_rules:
       - condition: "需求已 approved 且无残留 pending"
-        points: 0.2
         reason: "需求已定稿，计划依据稳固"
       - condition: "ai-rules 有架构/分层/选型条款可直接裁决"
-        points: 0.2
         reason: "有项目规范背书"
       - condition: "仓库已有同类实现可直接复用"
-        points: 0.2
         reason: "有现网依据，方案把握高"
-    subtract_rules:
+    low_confidence_rules:
       - condition: "引入新技术栈/新依赖"
-        points: 0.2
         reason: "新技术引入不确定性，降低把握"
       - condition: "涉及跨服务契约变更"
-        points: 0.2
         reason: "跨服务契约影响面大"
       - condition: "涉及性能/容量/可用性非功能指标"
-        points: 0.1
         reason: "非功能指标需实测验证，不宜高置信"
 
   review_plan:
     description: 计划评审
-    base_score: 0.5
-    add_rules:
+    high_confidence_rules:
       - condition: "plan 已对齐需求验收标准"
-        points: 0.2
         reason: "对齐验收 = 范围正确，推荐把握高"
       - condition: "ai-rules 有明确架构/接口口径"
-        points: 0.2
         reason: "有项目规范背书"
       - condition: "里程碑与现网迭代节奏一致"
-        points: 0.1
         reason: "节奏一致 = 可执行性高"
-    subtract_rules:
+    low_confidence_rules:
       - condition: "架构与仓库现状不一致"
-        points: 0.2
         reason: "偏离现状，风险高"
       - condition: "接口/API 范围超出需求"
-        points: 0.2
         reason: "范围蔓延，需用户确认"
       - condition: "仍有未落地的风险/待决策项"
-        points: 0.2
         reason: "未落地 = 不确定，降低把握"
 
   split_tasks:
     description: 任务拆分
-    base_score: 0.5
-    add_rules:
+    high_confidence_rules:
       - condition: "plan 已 approved"
-        points: 0.2
         reason: "计划已定稿，拆分依据稳固"
       - condition: "任务可直接映射现有模块/文件"
-        points: 0.2
         reason: "落点明确，把握高"
       - condition: "API 契约已在 plan 中明确"
-        points: 0.2
         reason: "契约明确 = 任务边界清晰"
-    subtract_rules:
+    low_confidence_rules:
       - condition: "任务跨多模块/多服务"
-        points: 0.2
         reason: "跨模块任务边界易模糊"
       - condition: "复用需改动既有公共组件"
-        points: 0.2
         reason: "改旧组件有回归风险，需用户决策"
       - condition: "执行顺序存在循环依赖"
-        points: 0.1
         reason: "循环依赖影响可执行性"

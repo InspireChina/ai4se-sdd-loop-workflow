@@ -61,7 +61,7 @@ items:
 ```
 
 3. `plan_approval` 保持 `pending`（由 review 节点写 approved）
-4. `suggestion_confidence` 打分依据（按下方规则逐条对照命中后计算；无人值守下虽全部自决，仍按规则给值以便复盘）：
+4. `suggestion_confidence` 把握依据（按下方规则对照命中情况，综合给出把握度；无人值守下虽全部自决，仍按规则给值以便复盘）：
 
 {{suggestion_confidence_rules}}
 

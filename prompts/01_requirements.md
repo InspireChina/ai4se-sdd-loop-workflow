@@ -109,7 +109,7 @@ user_note: ""
 - `pending_count` 必须等于 `status: pending` 的条目数
 - **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
 - **`suggestion_confidence`（0-1 浮点）**：表示你对该推荐为正确方案的把握程度；无法评估时写 `0.0`。当前推荐强度阈值 = `{{recommendation_threshold}}`
-- **`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算）：
+- **`suggestion_confidence` 把握依据**（按下方规则对照命中情况，综合给出把握度）：
 
 {{suggestion_confidence_rules}}
 

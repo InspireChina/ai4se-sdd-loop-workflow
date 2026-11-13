@@ -54,7 +54,6 @@ class NodeConfig:
 @dataclass
 class ScoringRule:
     condition: str
-    points: float
     reason: str
 
 
@@ -62,9 +61,8 @@ class ScoringRule:
 class NodeScoringRules:
     node_id: str
     description: str
-    base_score: float | None  # None = 未指定，合并时回退引擎基线
-    add_rules: list[ScoringRule] = field(default_factory=list)
-    subtract_rules: list[ScoringRule] = field(default_factory=list)
+    high_confidence_rules: list[ScoringRule] = field(default_factory=list)
+    low_confidence_rules: list[ScoringRule] = field(default_factory=list)
 
 
 @dataclass
@@ -147,39 +145,28 @@ def _parse_scoring_rule(raw: Any) -> ScoringRule | None:
     condition = _as_str(raw.get("condition"))
     if not condition:
         return None
-    try:
-        points = float(raw.get("points") or 0.0)
-    except (TypeError, ValueError):
-        points = 0.0
     reason = _as_str(raw.get("reason"))
-    return ScoringRule(condition=condition, points=points, reason=reason)
+    return ScoringRule(condition=condition, reason=reason)
 
 
 def _parse_node_scoring_rules(node_id: str, raw: Any) -> NodeScoringRules:
     if not isinstance(raw, dict):
         raw = {}
-    base_score: float | None = None
-    if raw.get("base_score") is not None:
-        try:
-            base_score = float(raw.get("base_score"))
-        except (TypeError, ValueError):
-            base_score = None
-    add_rules: list[ScoringRule] = []
-    for item in raw.get("add_rules") or []:
+    high_confidence_rules: list[ScoringRule] = []
+    for item in raw.get("high_confidence_rules") or []:
         rule = _parse_scoring_rule(item)
         if rule:
-            add_rules.append(rule)
-    subtract_rules: list[ScoringRule] = []
-    for item in raw.get("subtract_rules") or []:
+            high_confidence_rules.append(rule)
+    low_confidence_rules: list[ScoringRule] = []
+    for item in raw.get("low_confidence_rules") or []:
         rule = _parse_scoring_rule(item)
         if rule:
-            subtract_rules.append(rule)
+            low_confidence_rules.append(rule)
     return NodeScoringRules(
         node_id=node_id,
         description=_as_str(raw.get("description")),
-        base_score=base_score,
-        add_rules=add_rules,
-        subtract_rules=subtract_rules,
+        high_confidence_rules=high_confidence_rules,
+        low_confidence_rules=low_confidence_rules,
     )
 
 
@@ -202,10 +189,10 @@ def _load_scoring_rules_file(path: Path) -> dict[str, NodeScoringRules]:
 def load_suggestion_confidence_rules(
     app_root: Path, workflow_root: Path
 ) -> dict[str, NodeScoringRules]:
-    """加载并合并 suggestion_confidence 打分规则：引擎基线 + 业务扩展。
+    """加载并合并 suggestion_confidence 把握规则：引擎基线 + 业务扩展。
 
-    合并策略：业务文件中某节点若配置 base_score 则覆盖引擎；add_rules /
-    subtract_rules 叠加到引擎基线之后。业务文件缺失时仅用引擎基线。
+    合并策略：high_confidence_rules / low_confidence_rules 均叠加到引擎基线
+    之后（引擎通用 + 项目扩展）。业务文件缺失时仅用引擎基线。
     """
     engine_path = workflow_root / "config" / SUGGESTION_CONFIDENCE_RULES_FILENAME
     business_path = (
@@ -222,29 +209,20 @@ def load_suggestion_confidence_rules(
         engine = engine_rules.get(node_id)
         business = business_rules.get(node_id)
         if engine and business:
-            base = (
-                business.base_score
-                if business.base_score is not None
-                else engine.base_score
-            )
             merged[node_id] = NodeScoringRules(
                 node_id=node_id,
                 description=business.description or engine.description,
-                base_score=base,
-                add_rules=[*engine.add_rules, *business.add_rules],
-                subtract_rules=[*engine.subtract_rules, *business.subtract_rules],
-            )
-        elif business:
-            base = business.base_score if business.base_score is not None else 0.5
-            merged[node_id] = NodeScoringRules(
-                node_id=business.node_id,
-                description=business.description,
-                base_score=base,
-                add_rules=business.add_rules,
-                subtract_rules=business.subtract_rules,
+                high_confidence_rules=[
+                    *engine.high_confidence_rules,
+                    *business.high_confidence_rules,
+                ],
+                low_confidence_rules=[
+                    *engine.low_confidence_rules,
+                    *business.low_confidence_rules,
+                ],
             )
         else:
-            merged[node_id] = engine  # type: ignore[arg-type]
+            merged[node_id] = (business or engine)  # type: ignore[arg-type]
     return merged
 
 

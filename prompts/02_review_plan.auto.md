@@ -73,7 +73,7 @@
 
 **禁止**将实现细节类问题列入 review 清单（除非需求明文规定）。
 
-**`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算；无人值守下虽全部自决，仍按规则给值以便复盘）：
+**`suggestion_confidence` 把握依据**（按下方规则对照命中情况，综合给出把握度；无人值守下虽全部自决，仍按规则给值以便复盘）：
 
 {{suggestion_confidence_rules}}
 

@@ -74,7 +74,7 @@
 
 识别不确定点，输出初步清单与决策清单（可先 pending，`tasks_approval.status` 写 `pending`）。写入 `{{final_output_path}}`。
 
-**`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算；无人值守下虽全部自决，仍按规则给值以便复盘）：
+**`suggestion_confidence` 把握依据**（按下方规则对照命中情况，综合给出把握度；无人值守下虽全部自决，仍按规则给值以便复盘）：
 
 {{suggestion_confidence_rules}}
 

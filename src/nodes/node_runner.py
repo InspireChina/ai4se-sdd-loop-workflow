@@ -32,14 +32,14 @@ from ..state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
 
-EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 打分规则；按你的整体把握给 0-1 浮点，无法评估写 0.0）"
+EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 把握规则；按你的整体把握给 0-1 浮点，无法评估写 0.0）"
 
 
-def _format_rule_list(rules: list, sign: str) -> list[str]:
+def _format_rule_list(rules: list, label: str) -> list[str]:
     lines: list[str] = []
     for rule in rules:
         lines.append(
-            f"  - {sign}{rule.points:.1f}　{rule.condition}"
+            f"  - {rule.condition}"
             + (f"（{rule.reason}）" if rule.reason else "")
         )
     return lines
@@ -49,32 +49,30 @@ def build_suggestion_confidence_prompt(
     scoring_rules: dict[str, NodeScoringRules],
     node_id: str,
 ) -> str:
-    """把当前节点的 suggestion_confidence 打分规则渲染为可注入 prompt 的文本。"""
+    """把当前节点的 suggestion_confidence 把握规则渲染为可注入 prompt 的文本。"""
     rules = scoring_rules.get(node_id)
     if not rules:
         return EMPTY_SCORING_HINT
 
-    base = rules.base_score if rules.base_score is not None else 0.5
     lines: list[str] = []
     if rules.description:
         lines.append(f"**节点**：{rules.description}")
-    lines.append(f"**起始分 base_score**：{base:.2f}")
     lines.append("")
-    lines.append("**加分规则 add_rules**（命中即加分）：")
-    if rules.add_rules:
-        lines.extend(_format_rule_list(rules.add_rules, "+"))
+    lines.append("**高把握规则 high_confidence_rules**（命中则把握更高）：")
+    if rules.high_confidence_rules:
+        lines.extend(_format_rule_list(rules.high_confidence_rules, "high"))
     else:
         lines.append("  - （无）")
     lines.append("")
-    lines.append("**减分规则 subtract_rules**（命中即减分）：")
-    if rules.subtract_rules:
-        lines.extend(_format_rule_list(rules.subtract_rules, "−"))
+    lines.append("**低把握规则 low_confidence_rules**（命中则把握更低）：")
+    if rules.low_confidence_rules:
+        lines.extend(_format_rule_list(rules.low_confidence_rules, "low"))
     else:
         lines.append("  - （无）")
     lines.append("")
     lines.append(
-        f"**打分公式**：confidence = clamp({base:.2f} + Σ加分 − Σ减分, 0, 1)；"
-        "逐条对照命中后计算，并在 `suggestion_reason` 注明命中的规则依据。"
+        "综合命中的高/低把握规则，自行给出 0-1 的 `suggestion_confidence`，"
+        "并在 `suggestion_reason` 注明命中的规则依据；无硬性公式。"
     )
     return "\n".join(lines)
 
