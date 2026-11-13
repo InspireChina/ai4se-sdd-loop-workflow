@@ -128,8 +128,8 @@ YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、�
 1. 逐条处理 `status: pending` 的问题：
    - **推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，**直接采纳推荐方案**——`status: resolved`，`answer` 写入 `suggestion` + `suggestion_reason`（注明「按推荐强度自动采纳」），同步更新 `pending_count` / `all_resolved`，**不要**就该项询问用户
    - **低于阈值才问用户**：仅当 `suggestion_confidence < {{recommendation_threshold}}`（或为 0 / 无法评估）时，才向用户呈现该问题；允许确认、修改、拒绝或补充
-   - **面向用户展示时必须用自然语言完整描述**：禁止直接抛出 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识；若问题涉及某模块/某条规则/某项配置，**直接写出其全名 + 一句话说明**，再附 `suggestion` 与 `suggestion_reason`，让用户无需查阅任何资料即可理解并决策
-   - 展示推荐项时**必须同时给出推荐原因**（`suggestion_reason`），不得只给"建议选 A"而不说为什么
+   - **面向用户展示时必须用自然语言完整描述**：禁止直接抛出 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识；若问题涉及某模块/某条规则/某项配置，**直接写出其全名 + 一句话说明**，再附 `suggestion`、`suggestion_confidence`（推荐把握度，0-1）与 `suggestion_reason`，让用户无需查阅任何资料即可理解并决策
+   - 展示推荐项时**必须同时给出推荐把握度（`suggestion_confidence`）与推荐原因（`suggestion_reason`）**：例如「推荐：X（把握 0.85，因 ai-rules 第…条）」，不得只给"建议选 A"而不说把握度与为什么
 2. 用户给出回答后，**立即**更新 `{{final_output_path}}` 顶部的 `clarification_checklist`：
    - 已确认项：`status: resolved`，`answer` 写入用户最终结论
    - 同步更新 `pending_count`、`all_resolved`
