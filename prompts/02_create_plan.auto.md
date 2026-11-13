@@ -19,7 +19,7 @@
 
 ### 4. 前后端版块按需输出，勿凭空补齐
 
-仅输出与本次需求**实际相关**的版块。后端不涉及就只写前端版块，反之同理；两者都涉及才两块都写。不相关的版块**不要**为了"凑齐两块"而杜撰内容，也不要整块写「不涉及」——直接不输出该版块即可。是否相关以「第 0 步」识别结果 + 需求本身的作用面为准。
+只输出下面「本次角色」里列出的版块。没列出的版块不要补，也不要整块写「不涉及」。
 
 ## 写作语言（**全程必须遵守**）
 
@@ -49,28 +49,20 @@
 
 `{{final_output_path}}`
 
-## 第 0 步：识别项目前后端类型（**落笔前必须先做**）
+## 第 0 步：按本次角色写 plan（**落笔前必须先做**）
 
-本次需求可能落在后端、前端、或前后端都涉及。你必须先**扫描当前打开的仓库代码**判断项目类型，再决定输出哪些版块。
+按下面的角色和版块写 plan，不要再扫仓库重判。
 
-### 识别信号（按仓库根目录与常见路径判断）
+### 本次角色
 
-- **前端信号**：`package.json` 且依赖含 `vue`/`react`/`@angular/core`/`svelte`/`solid-js`/`next`/`nuxt`/`vite`/`webpack`；存在 `src/pages`、`src/components`、`src/views`、`src/router`、`*.vue`、`*.jsx`、`*.tsx`；构建配置 `vite.config.*`/`webpack.config.*`/`next.config.*`
-- **后端信号**：`pom.xml`/`build.gradle`（Java/Spring）、`go.mod`（Go）、`requirements.txt`/`pyproject.toml` 且含 `fastapi`/`django`/`flask`/`gin`/`echo`、`src/main/java`、`application.yml`/`application.properties`、`Cargo.toml`（Rust actix/axum）、`composer.json`（PHP Laravel）
-- **前后端都有**：monorepo 同时含上述前端与后端信号（如 `frontend/` + `backend/`、`web/` + `server/`、或根目录 `package.json` 与 `pom.xml` 并存）
+{{role_scope}}
 
-### 判定与输出规则（无人值守：能自决则自决，不问用户）
+- 版块只有「后端」→ 只输出版块 A
+- 版块只有「前端」→ 只输出版块 B
+- 版块是「后端、前端」→ 版块 A、B 都输出
+- 上面是「未识别」→ 按需求正文能看出来的版块自决，写入 `clarification_checklist`（`pending` + `suggestion`），不要问用户
 
-1. **仅前端信号** → 只输出「前端实现计划」版块
-2. **仅后端信号** → 只输出「后端实现计划」版块
-3. **前后端都有** → 按需求实际作用面判断：只动后端 → 只输出后端版块；只动前端 → 只输出前端版块；前后端都动 → 两块都输出
-4. **无法确定作用面归属** → 按 `ai-rules` → 本 prompt → `suggestion` 自决倾向方案，正文先按倾向版块出初稿并在该版块开头注明「自决：作用面归属（依据…）」；同时写入 `clarification_checklist`（`pending` + 给出 `suggestion` 与 `suggestion_confidence`），交 review 无人值守节点消解，**不要**停下问用户
-
-### 在正文开头声明识别结果
-
-正文最前面（YAML 之后）用一行写明识别结论，例如：
-
-> 项目类型识别：仅后端 / 仅前端 / 前后端都有（本次输出：后端版块 / 前端版块 / 前后端双版块）。判定依据：仓库根存在 `pom.xml` 与 `src/main/java`，未发现前端构建配置。
+`02-plan.md` 最开头、任何 YAML 之前先写「角色与版块」，照抄上面的角色、版块、依据。
 
 ## 计划正文结构
 
@@ -181,7 +173,7 @@
 
 ## 执行要求
 
-1. 开头 YAML（待 review 消解的项标 `pending`，每条必须有清晰 `suggestion`）：
+1. 「角色与版块」之后写 YAML（待 review 消解的项标 `pending`，每条必须有清晰 `suggestion`）：
 
 ```yaml clarification_checklist
 all_resolved: false

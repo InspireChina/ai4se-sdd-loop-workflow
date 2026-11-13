@@ -29,6 +29,10 @@ class DevWorkflowState(TypedDict, total=False):
     change_scope: str
     affected_modules: list[str]
     compatibility_risk: str  # low | medium | high | unknown
+    # 需求分析识别的前后端角色，后续节点只读这份状态
+    delivery_role: str  # backend | frontend | both | unknown
+    delivery_blocks: list[str]  # backend / frontend
+    role_basis: str
     requirement_metadata: Annotated[dict, merge_dict]
     # 需求澄清 loop
     clarification_questions: list[dict[str, str]]

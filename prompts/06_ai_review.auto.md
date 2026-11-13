@@ -39,6 +39,12 @@
 
 编排引擎：`{{project_root}}`。业务代码：`{{app_root}}`。
 
+## 本次角色
+
+{{role_scope}}
+
+`06-ai-review.md` 最开头先写「角色与版块」，照抄上面的角色、版块、依据。
+
 ## 产出路径
 
 `{{output_path}}`

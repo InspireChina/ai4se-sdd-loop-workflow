@@ -47,6 +47,12 @@
 
 {{doc_01-requirements.md}}
 
+## 本次角色
+
+{{role_scope}}
+
+`02-test-cases.md` 最开头、任何 YAML 之前先写「角色与版块」，照抄上面的角色、版块、依据。
+
 ## 产出路径
 
 `{{final_output_path}}`

@@ -17,7 +17,11 @@ from ..parsers.approval_parser import (
     parse_tasks_approval,
     parse_test_cases_approval,
 )
-from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
+from ..parsers.requirement_parser import (
+    RequirementMetadata,
+    format_role_scope,
+    parse_requirement_metadata,
+)
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
 from ..phase_gate import (
@@ -547,6 +551,11 @@ class NodeRunner:
                 "是 — 跳过与用户澄清，初稿无 pending 时直接输出定稿。"
                 if state.get("skip_clarification")
                 else "否 — 初稿有待澄清/待决策项时，必须在会话中与用户确认。"
+            ),
+            "role_scope": format_role_scope(
+                str(state.get("delivery_role") or ""),
+                list(state.get("delivery_blocks") or []),
+                str(state.get("role_basis") or ""),
             ),
         }
 

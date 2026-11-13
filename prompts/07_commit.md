@@ -60,6 +60,12 @@ AI Review：
 
 编排引擎：`{{project_root}}`。业务代码：`{{app_root}}`。文档产出（**禁止提交**）：`{{docs_dir}}`。
 
+## 本次角色
+
+{{role_scope}}
+
+`07-commit.md` 最开头先写「角色与版块」，照抄上面的角色、版块、依据。
+
 ## 产出路径
 
 写入 `{{output_path}}`：是否提交、message、commit hash（若有）、跳过/拒绝原因、是否遵循了扩展 rule、**后续 Action List**。

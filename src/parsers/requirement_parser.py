@@ -28,6 +28,27 @@ RISK_ALIASES = {
     "高": "high",
 }
 
+ROLE_ALIASES = {
+    "backend": "backend",
+    "后端": "backend",
+    "frontend": "frontend",
+    "前端": "frontend",
+    "both": "both",
+    "前后端": "both",
+    "前后端都有": "both",
+}
+
+ROLE_LABELS = {
+    "backend": "后端",
+    "frontend": "前端",
+    "both": "前后端",
+}
+
+BLOCK_LABELS = {
+    "backend": "后端",
+    "frontend": "前端",
+}
+
 
 @dataclass
 class RequirementMetadata:
@@ -39,6 +60,10 @@ class RequirementMetadata:
     needs_clarification: bool = False
     open_questions_count: int = 0
     judgment_basis: str = ""
+    # 需求分析识别出的前后端角色，写入 workflow 状态后向下游传递
+    delivery_role: str = "unknown"  # backend | frontend | both | unknown
+    delivery_blocks: list[str] = field(default_factory=list)  # backend / frontend
+    role_basis: str = ""
 
     def to_state_updates(self) -> dict[str, Any]:
         return {
@@ -47,10 +72,16 @@ class RequirementMetadata:
             "change_scope": self.change_scope,
             "affected_modules": self.affected_modules,
             "compatibility_risk": self.compatibility_risk,
+            "delivery_role": self.delivery_role,
+            "delivery_blocks": list(self.delivery_blocks),
+            "role_basis": self.role_basis,
             "requirement_metadata": {
                 "needs_clarification": self.needs_clarification,
                 "open_questions_count": self.open_questions_count,
                 "judgment_basis": self.judgment_basis,
+                "delivery_role": self.delivery_role,
+                "delivery_blocks": list(self.delivery_blocks),
+                "role_basis": self.role_basis,
             },
         }
 
@@ -79,10 +110,29 @@ class RequirementMetadata:
 
 def parse_requirement_metadata(content: str) -> RequirementMetadata:
     raw = _extract_yaml_block(content)
-    if raw:
-        return _from_yaml(raw)
+    metadata = _from_yaml(raw) if raw else _from_markdown_fallback(content)
+    if metadata.delivery_role == "unknown":
+        role, blocks, basis = _parse_role_section(content)
+        if role != "unknown":
+            metadata.delivery_role = role
+            metadata.delivery_blocks = blocks
+            metadata.role_basis = basis or metadata.role_basis
+    return metadata
 
-    return _from_markdown_fallback(content)
+
+def format_role_scope(role: str, blocks: list[str] | None, basis: str) -> str:
+    """把状态下的角色渲染成下游 prompt 可直接阅读的文本。"""
+    normalized_role, normalized_blocks = _coerce_role_blocks(role, blocks or [])
+    if normalized_role == "unknown":
+        return "（未识别）"
+    block_text = "、".join(
+        BLOCK_LABELS[item] for item in normalized_blocks if item in BLOCK_LABELS
+    )
+    return (
+        f"- 角色：{ROLE_LABELS[normalized_role]}\n"
+        f"- 版块：{block_text}\n"
+        f"- 依据：{basis.strip() or '需求分析节点写入'}"
+    )
 
 
 def _extract_yaml_block(content: str) -> dict[str, Any] | None:
@@ -138,6 +188,7 @@ def _from_yaml(data: dict[str, Any]) -> RequirementMetadata:
         needs_clarification=bool(data.get("needs_clarification", False)),
         open_questions_count=int(data.get("open_questions_count", 0) or 0),
         judgment_basis=str(data.get("judgment_basis", "")).strip(),
+        **_role_fields(data.get("delivery_role"), data.get("delivery_blocks"), data.get("role_basis")),
     )
 
 
@@ -167,4 +218,73 @@ def _from_markdown_fallback(content: str) -> RequirementMetadata:
     if risk_match:
         metadata.compatibility_risk = _normalize_risk(risk_match.group(1))
 
+    role, blocks, basis = _parse_role_section(content)
+    metadata.delivery_role = role
+    metadata.delivery_blocks = blocks
+    metadata.role_basis = basis
     return metadata
+
+
+def _role_fields(role_raw: Any, blocks_raw: Any, basis_raw: Any) -> dict[str, Any]:
+    role, blocks = _coerce_role_blocks(role_raw, _as_str_list(blocks_raw))
+    return {
+        "delivery_role": role,
+        "delivery_blocks": blocks,
+        "role_basis": str(basis_raw or "").strip(),
+    }
+
+
+def _coerce_role_blocks(role_raw: Any, blocks_raw: list[str]) -> tuple[str, list[str]]:
+    blocks: list[str] = []
+    for item in blocks_raw:
+        key = ROLE_ALIASES.get(str(item).strip(), "")
+        if key == "both":
+            for side in ("backend", "frontend"):
+                if side not in blocks:
+                    blocks.append(side)
+        elif key in ("backend", "frontend") and key not in blocks:
+            blocks.append(key)
+
+    role = ROLE_ALIASES.get(str(role_raw or "").strip(), "")
+    if set(blocks) == {"backend", "frontend"}:
+        role = "both"
+    elif blocks == ["backend"]:
+        role = "backend"
+    elif blocks == ["frontend"]:
+        role = "frontend"
+    elif role == "both":
+        blocks = ["backend", "frontend"]
+    elif role in ("backend", "frontend"):
+        blocks = [role]
+    else:
+        role = "unknown"
+        blocks = []
+
+    ordered = [item for item in ("backend", "frontend") if item in blocks]
+    return role, ordered
+
+
+def _parse_role_section(content: str) -> tuple[str, list[str], str]:
+    match = re.search(
+        r"##\s*角色与版块\s*\n(.*?)(?:\n##\s|\Z)",
+        content,
+        re.DOTALL,
+    )
+    if not match:
+        return "unknown", [], ""
+    section = match.group(1)
+    role_match = re.search(r"角色\s*[:：]\s*([^\n]+)", section)
+    block_match = re.search(r"版块\s*[:：]\s*([^\n]+)", section)
+    basis_match = re.search(r"依据\s*[:：]\s*([^\n]+)", section)
+    block_text = block_match.group(1) if block_match else ""
+    blocks = [
+        part.strip(" `")
+        for part in re.split(r"[、,，/|]+", block_text)
+        if part.strip(" `")
+    ]
+    role, normalized_blocks = _coerce_role_blocks(
+        role_match.group(1).strip(" `") if role_match else "",
+        blocks,
+    )
+    basis = basis_match.group(1).strip(" `") if basis_match else ""
+    return role, normalized_blocks, basis

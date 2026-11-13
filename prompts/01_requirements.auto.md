@@ -14,14 +14,27 @@
 
 ### 按用户角色（前/后端）自决澄清
 
-先**识别当前打开的仓库属于前端还是后端**（识别信号：后端 = `pom.xml`/`go.mod`/`src/main/java`/`application.yml` 等；前端 = `package.json` 含 vue/react 等、`src/components`、`*.vue`/`*.tsx` 等；前后端都有 = monorepo 或前后端信号并存）。据此判断用户角色并按角色自决澄清项：
+先扫描当前打开的仓库，定下本次角色和要出的版块，写进 `requirement_metadata` 的 `delivery_role`、`delivery_blocks`、`role_basis`。
 
-- 仓库为**后端** → 只产出/消解后端口径的需求澄清；前端 UI/交互类歧义项按 `suggestion` 自决并注明「与当前用户角色（后端）无关，按推荐自决」
-- 仓库为**前端** → 只产出/消解前端口径的需求澄清；后端表结构/事务/消息队列类歧义项按 `suggestion` 自决并注明「与当前用户角色（前端）无关，按推荐自决」
-- 仓库**前后端都有** → 按各歧义项实际归属版块分别自决；无法判断归属前还是后的项，按 `ai-rules` → `suggestion` 自决并注明「作用面归属自决（依据…）」
-- 仓库信号**无法判断**前后端时 → 按 `ai-rules` → `suggestion` 全部自决，注明「仓库前后端信号不明，按推荐自决」
+识别信号：后端 = `pom.xml`/`go.mod`/`src/main/java`/`application.yml` 等；前端 = `package.json` 含 vue/react 等、`src/components`、`*.vue`/`*.tsx` 等；前后端都有 = monorepo 或前后端信号并存。
 
-**判定依据要写明**：在定稿正文开头用一句话写明识别到的角色与依据。
+- 只有后端信号 → 角色是后端，版块只写「后端」。只消解后端口径；前端页面/交互类歧义按 `suggestion` 自决并注明「需求文档未列前端版块，按推荐自决」
+- 只有前端信号 → 角色是前端，版块只写「前端」。只消解前端口径；后端表结构/事务/消息队列类歧义按 `suggestion` 自决并注明「需求文档未列后端版块，按推荐自决」
+- 前后端信号都有 → 再看这次需求实际动哪边：只动一边就只留那一个版块，两边都动才写「后端、前端」。分不清归属的项按 `ai-rules` → `suggestion` 自决并注明依据
+- 仓库信号分不清 → 按 `ai-rules` → `suggestion` 自决角色和版块，注明依据，**不要**问用户
+
+`delivery_role` 只能是 `backend`、`frontend`、`both`。`delivery_blocks` 只能包含 `backend`、`frontend`。只做后端时 `delivery_role: backend` 且 `delivery_blocks` 只有 `backend`；只做前端同理；两边都做时 `delivery_role: both`，`delivery_blocks` 两个都写。`role_basis` 用一句话写依据。
+
+文件最开头、任何 YAML 之前先写「角色与版块」，内容和这三个字段一致：
+
+```markdown
+## 角色与版块
+- 角色：后端
+- 版块：后端
+- 依据：仓库根有 pom.xml 和 src/main/java，没有前端工程
+```
+
+角色只能是「后端 / 前端 / 前后端」之一。版块只能是「后端」「前端」或「后端、前端」。
 
 ## 项目定制约束（**必须严格遵守**）
 
@@ -68,7 +81,7 @@
 3. 列出待澄清问题清单（可先标 `pending`，须在本节点内全部消解）
 4. **不要**在此阶段输出最终定稿
 
-文件**最开头**必须包含（初稿阶段 `requirement_approval.status` 写 `pending`）：
+「角色与版块」之后紧跟 YAML（初稿阶段 `requirement_approval.status` 写 `pending`）：
 
 ```yaml requirement_metadata
 requirement_type: new
@@ -80,6 +93,10 @@ affected_modules:
 compatibility_risk: low
 needs_clarification: true
 open_questions_count: 2
+delivery_role: backend
+delivery_blocks:
+  - backend
+role_basis: "仓库根有 pom.xml 和 src/main/java，没有前端工程"
 ```
 
 ```yaml clarification_checklist
@@ -134,7 +151,7 @@ YAML 之后输出 Markdown 正文。写入 `{{final_output_path}}`。
 1. 吸收已决议内容，输出最终标准需求文档
 2. 写入 `{{final_output_path}}`（覆盖初稿，保留顶部 YAML，更新 `requirement_metadata.needs_clarification: false` / `open_questions_count: 0`）
 
-定稿**最开头**三个 YAML 块：
+定稿仍以「角色与版块」开头，紧接着三个 YAML 块：
 
 **1) 需求元数据**
 
@@ -148,6 +165,10 @@ affected_modules:
 compatibility_risk: low
 needs_clarification: false
 open_questions_count: 0
+delivery_role: backend
+delivery_blocks:
+  - backend
+role_basis: "仓库根有 pom.xml 和 src/main/java，没有前端工程"
 ```
 
 **2) 澄清清单（全部 resolved）**
