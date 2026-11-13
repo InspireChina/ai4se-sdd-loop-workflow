@@ -14,7 +14,7 @@ nodes:
   design_test_cases:
     tool: claude_code
     model: ""
-  review_plan_and_tests:
+  review_plan:
     tool: claude_code
     model: ""
   split_tasks:

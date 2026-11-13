@@ -58,19 +58,18 @@ nodes:
       - state: change_scope
       - state: affected_modules
 
-  review_plan_and_tests:
-    name: 计划与测试用例评审
+  review_plan:
+    name: 计划评审
     tool: claude_code
     mode: interactive
-    prompt: prompts/02_review_plan_and_tests.md
-    prompt_auto: prompts/02_review_plan_and_tests.auto.md
-    output: 02-plan-test-review.md
+    prompt: prompts/02_review_plan.md
+    prompt_auto: prompts/02_review_plan.auto.md
+    output: 02-plan-review.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-test-cases.md
-      - doc: 02-plan-test-review.draft.md
-      - doc: 02-plan-test-review.md
+      - doc: 02-plan-review.draft.md
+      - doc: 02-plan-review.md
       - state: requirement_type
       - state: requirement_summary
       - state: change_scope
@@ -87,8 +86,7 @@ nodes:
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-test-cases.md
-      - doc: 02-plan-test-review.md
+      - doc: 02-plan-review.md
       - doc: 03-tasks.draft.md
       - doc: 03-tasks.md
       - state: requirement_type

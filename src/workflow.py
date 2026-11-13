@@ -16,7 +16,7 @@ from .phase_gate import (
     phase_complete,
     requirements_complete,
     resolve_draft_path,
-    review_plan_tests_complete,
+    review_plan_complete,
 )
 from .requirement_dir import (
     resolve_app_root,
@@ -138,8 +138,8 @@ class DevWorkflow:
                 result[key] = value
         return result
 
-    def review_plan_and_tests(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("review_plan_and_tests", state)
+    def review_plan(self, state: DevWorkflowState) -> DevWorkflowState:
+        return self.node_runner.run_node("review_plan", state)
 
     def create_plan(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("create_plan", state)
@@ -171,12 +171,12 @@ class DevWorkflow:
     def _route_after_parallel(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
         if plan_and_tests_content_ready(docs_dir, state):
-            return "review_plan_and_tests"
+            return "review_plan"
         return END
 
     def _route_after_review(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
-        if review_plan_tests_complete(docs_dir, state):
+        if review_plan_complete(docs_dir, state):
             return "split_tasks"
         return END
 
@@ -201,7 +201,7 @@ class DevWorkflow:
         workflow.add_node("route_next", self.route_next)
         workflow.add_node("analyze_requirements", self.analyze_requirements)
         workflow.add_node("parallel_plan_and_tests", self.parallel_plan_and_tests)
-        workflow.add_node("review_plan_and_tests", self.review_plan_and_tests)
+        workflow.add_node("review_plan", self.review_plan)
         workflow.add_node("create_plan", self.create_plan)
         workflow.add_node("split_tasks", self.split_tasks)
         workflow.add_node("implement_code", self.implement_code)
@@ -216,7 +216,7 @@ class DevWorkflow:
             {
                 "analyze_requirements": "analyze_requirements",
                 "parallel_plan_and_tests": "parallel_plan_and_tests",
-                "review_plan_and_tests": "review_plan_and_tests",
+                "review_plan": "review_plan",
                 "create_plan": "create_plan",
                 "split_tasks": "split_tasks",
                 "implement_code": "implement_code",
@@ -237,12 +237,12 @@ class DevWorkflow:
             "parallel_plan_and_tests",
             self._route_after_parallel,
             {
-                "review_plan_and_tests": "review_plan_and_tests",
+                "review_plan": "review_plan",
                 END: END,
             },
         )
         workflow.add_conditional_edges(
-            "review_plan_and_tests",
+            "review_plan",
             self._route_after_review,
             {
                 "split_tasks": "split_tasks",
@@ -355,7 +355,7 @@ class DevWorkflow:
             "requirement_approved": False,
             "plan_approved": False,
             "test_cases_approved": False,
-            "review_plan_tests_approved": False,
+            "review_plan_approved": False,
             "tasks_approved": False,
             "test_passed": False,
             "last_error": None,

@@ -101,7 +101,7 @@ your-project/
 |------|------|--------|
 | 需求分析 | `01-requirements.md` | 澄清与定稿 |
 | 制定计划 / 设计用例 | `02-plan.md`、`02-test-cases.md` | 并行初稿 |
-| 计划与用例评审 | `02-plan-test-review.md` | 对齐并确认 |
+| 计划评审 | `02-plan-review.md` | 只 review 计划并确认；用例 review 由 QA 异步进行，不阻塞核心流程 |
 | 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
 | 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
 | 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
@@ -142,8 +142,8 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 | 已有关键产出（示意） | 通常从哪继续 |
 |----------------------|--------------|
 | 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
-| `01-requirements` 已完成，计划/用例未齐 | 并行生成或 `review_plan_and_tests` |
-| `02-plan-test-review` 已批 | `split_tasks` |
+| `01-requirements` 已完成，计划/用例未齐 | 并行生成或 `review_plan` |
+| `02-plan-review` 已批 | `split_tasks` |
 | `03-tasks` 已批 | `implement_code` |
 | `04-implementation` 已有 | `verify_tests` |
 | `05-test-report` 已有 | `ai_review` |
@@ -200,7 +200,7 @@ nodes:
 - Skills：Colla 需求先按项目 `fetch-colla-prd` 的读法拉取
 ```
 
-常用节点 ID：`analyze_requirements` / `create_plan` / `design_test_cases` / `review_plan_and_tests` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
+常用节点 ID：`analyze_requirements` / `create_plan` / `design_test_cases` / `review_plan` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
 
 ### 提交与后续 Action List
 
@@ -232,7 +232,7 @@ nodes:
   design_test_cases:
     tool: claude_code
     model: ""
-  review_plan_and_tests:
+  review_plan:
     tool: claude_code
     model: ""
   split_tasks:

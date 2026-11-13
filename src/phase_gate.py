@@ -73,7 +73,7 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         final_file="02-plan.md",
         approval_block="plan_approval",
         approval_state_key="plan_approved",
-        next_node="review_plan_and_tests",
+        next_node="review_plan",
         min_body_chars=200,
         requires_approval=False,
         allow_unresolved_checklist=True,
@@ -84,17 +84,17 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         final_file="02-test-cases.md",
         approval_block="test_cases_approval",
         approval_state_key="test_cases_approved",
-        next_node="review_plan_and_tests",
+        next_node="review_plan",
         min_body_chars=200,
         requires_approval=False,
         allow_unresolved_checklist=True,
     ),
-    "review_plan_and_tests": PhaseConfig(
-        node_id="review_plan_and_tests",
-        draft_file="02-plan-test-review.draft.md",
-        final_file="02-plan-test-review.md",
-        approval_block="review_plan_tests_approval",
-        approval_state_key="review_plan_tests_approved",
+    "review_plan": PhaseConfig(
+        node_id="review_plan",
+        draft_file="02-plan-review.draft.md",
+        final_file="02-plan-review.md",
+        approval_block="review_plan_approval",
+        approval_state_key="review_plan_approved",
         next_node="split_tasks",
         min_body_chars=120,
     ),
@@ -145,7 +145,7 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
     and _validate_requirements_final(content),
     "create_plan": _validate_generic_final,
     "design_test_cases": _validate_generic_final,
-    "review_plan_and_tests": _validate_generic_final,
+    "review_plan": _validate_generic_final,
     "split_tasks": _validate_generic_final,
 }
 
@@ -203,15 +203,16 @@ def plan_and_tests_content_ready(docs_dir: Path, state: DevWorkflowState) -> boo
     )
 
 
-def review_plan_tests_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
-    """Review 节点完成：review 定稿确认，且 plan / test-cases 均已同步并确认。"""
-    if not phase_complete(docs_dir, "review_plan_and_tests", state):
+def review_plan_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
+    """Review plan 节点完成：review 定稿确认，且 plan 已同步确认。
+
+    注：test-cases 的 review 由 QA 异步进行，不阻塞核心流程，此处不检查 test_cases_approved。
+    """
+    if not phase_complete(docs_dir, "review_plan", state):
         return False
     if state.get("auto"):
         return True
-    return phase_user_approved(docs_dir, "create_plan") and phase_user_approved(
-        docs_dir, "design_test_cases"
-    )
+    return phase_user_approved(docs_dir, "create_plan")
 
 
 # --- 兼容旧 API ---

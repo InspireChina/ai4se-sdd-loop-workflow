@@ -46,9 +46,9 @@
 
 {{doc_02-plan.md}}
 
-## 计划与测试评审结论
+## 计划评审结论
 
-{{doc_02-plan-test-review.md}}
+{{doc_02-plan-review.md}}
 
 ## 跳过澄清
 

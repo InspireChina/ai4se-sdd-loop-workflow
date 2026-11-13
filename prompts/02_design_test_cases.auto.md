@@ -1,4 +1,5 @@
-> **运行模式：无人值守（--auto）并行初稿** — 不与用户交互。覆盖不确定项写入 checklist（带可采纳的 `suggestion`），交由 **review 无人值守 prompt** 消解。`test_cases_approval` 保持 `pending`。
+> **运行模式：无人值守（--auto）并行初稿** — 不与用户交互。覆盖不确定项写入 checklist（带可采纳的 `suggestion`），交由 **QA 异步 review** 消解。`test_cases_approval` 保持 `pending`。
+> **测试用例的 review 不在核心流程内**：本节点只产出用例初稿；QA 在自己机器上异步 review 后手动更新 `02-test-cases.md` 的 `test_cases_approval`。该状态不阻塞核心流程，引擎也不会在核心 gate 中等待它。
 > **工程规范与人工介入版相同**：用例少而精、勿过度设计、不绑实现细节——仅不确定项留给 review 无人值守消解。
 
 你是一名 QA 架构师。请根据**已定稿需求**，输出**测试用例文档初稿**。

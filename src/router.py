@@ -9,7 +9,7 @@ from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.approval_parser import (
     parse_plan_approval,
     parse_requirement_approval,
-    parse_review_plan_tests_approval,
+    parse_review_plan_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
@@ -23,7 +23,7 @@ from .phase_gate import (
     requirements_complete,
     requirements_content_ready,
     resolve_draft_path,
-    review_plan_tests_complete,
+    review_plan_complete,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,8 @@ RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
     ("05-test-report.md", "ai_review"),
     ("04-implementation.md", "verify_tests"),
     ("03-tasks.md", "implement_code"),
-    ("02-plan-test-review.md", "split_tasks"),
-    ("02-test-cases.md", "review_plan_and_tests"),
+    ("02-plan-review.md", "split_tasks"),
+    ("02-test-cases.md", "review_plan"),
     ("02-plan.md", "parallel_plan_and_tests"),
     ("01-requirements.md", "parallel_plan_and_tests"),
     ("draft/01-requirements.draft.md", None),
@@ -48,7 +48,7 @@ ROUTABLE_NODES = frozenset(
         "parallel_plan_and_tests",
         "create_plan",
         "design_test_cases",
-        "review_plan_and_tests",
+        "review_plan",
         "split_tasks",
         "implement_code",
         "verify_tests",
@@ -112,17 +112,17 @@ def _resolve_plan_tests_phase_start(
 ) -> str | None:
     """03-tasks 之前：plan + test-cases + review 阶段的续跑入口。"""
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
-    review_path = docs_dir / "02-plan-test-review.md"
+    review_path = docs_dir / "02-plan-review.md"
     plan_path = docs_dir / "02-plan.md"
     tests_path = docs_dir / "02-test-cases.md"
 
     if review_path.exists():
-        if review_plan_tests_complete(docs_dir, state):
+        if review_plan_complete(docs_dir, state):
             return "split_tasks"
-        return "review_plan_and_tests"
+        return "review_plan"
 
     if plan_path.exists() and tests_path.exists():
-        return "review_plan_and_tests"
+        return "review_plan"
 
     if plan_path.exists() or tests_path.exists():
         return "parallel_plan_and_tests"
@@ -170,11 +170,11 @@ def restore_state_from_docs(
             )
         )
 
-    review = docs_dir / "02-plan-test-review.md"
+    review = docs_dir / "02-plan-review.md"
     if review.exists():
         restored.update(
-            parse_review_plan_tests_approval(review.read_text(encoding="utf-8")).to_state(
-                "review_plan_tests_approved"
+            parse_review_plan_approval(review.read_text(encoding="utf-8")).to_state(
+                "review_plan_approved"
             )
         )
 
@@ -216,16 +216,16 @@ def _adjust_fallback(
     if filename == "02-plan.md":
         tests_path = docs_dir / "02-test-cases.md"
         if tests_path.exists():
-            return "review_plan_and_tests"
+            return "review_plan"
         return "parallel_plan_and_tests"
     if filename == "02-test-cases.md":
         plan_path = docs_dir / "02-plan.md"
         if plan_path.exists():
-            return "review_plan_and_tests"
+            return "review_plan"
         return "parallel_plan_and_tests"
-    if filename == "02-plan-test-review.md":
-        if not review_plan_tests_complete(docs_dir, state):
-            return "review_plan_and_tests"
+    if filename == "02-plan-review.md":
+        if not review_plan_complete(docs_dir, state):
+            return "review_plan"
     if filename == "03-tasks.md":
         if not phase_complete(docs_dir, "split_tasks", state):
             return "split_tasks"
@@ -269,9 +269,9 @@ def _resolve_from_status(
         ):
             if not requirements_complete(docs_dir, state):
                 return "analyze_requirements"
-        if filename == "02-plan-test-review.md" and status.next_node == "split_tasks":
-            if not review_plan_tests_complete(docs_dir, state):
-                return "review_plan_and_tests"
+        if filename == "02-plan-review.md" and status.next_node == "split_tasks":
+            if not review_plan_complete(docs_dir, state):
+                return "review_plan"
         if filename == "03-tasks.md" and status.next_node == "implement_code":
             if not phase_complete(docs_dir, "split_tasks", state):
                 return "split_tasks"
@@ -321,10 +321,10 @@ def _infer_from_status_fields(
             docs_dir, skip_clarification, auto=auto
         )
 
-    if filename == "02-plan-test-review.md":
-        if review_plan_tests_complete(docs_dir, state):
+    if filename == "02-plan-review.md":
+        if review_plan_complete(docs_dir, state):
             return "split_tasks"
-        return "review_plan_and_tests"
+        return "review_plan"
 
     if filename == "03-tasks.md":
         if phase_complete(docs_dir, "split_tasks", state):
@@ -358,7 +358,7 @@ def _infer_without_status(
             return "analyze_requirements"
         return "analyze_requirements"
 
-    if filename in ("02-plan.md", "02-test-cases.md", "02-plan-test-review.md"):
+    if filename in ("02-plan.md", "02-test-cases.md", "02-plan-review.md"):
         return _resolve_plan_tests_phase_start(
             path.parent, skip_clarification, auto=auto
         )

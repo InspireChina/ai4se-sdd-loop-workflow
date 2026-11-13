@@ -1,4 +1,5 @@
 > **运行模式：需要人工 review（并行初稿）** — 本节点 headless，不与用户交互；覆盖/策略不确定项写入待 review 清单。`test_cases_approval` 保持 `pending`。
+> **测试用例的 review 不在核心流程内**：本节点只产出用例初稿；QA 在自己机器上异步 review 后，手动将 `02-test-cases.md` 的 `test_cases_approval` 改为 `approved`。该状态不阻塞 task 拆分与后续核心流程。
 
 你是一名 QA 架构师。请根据**已定稿需求**，输出**测试用例文档初稿**。
 

@@ -13,7 +13,7 @@ from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_plan_approval,
     parse_requirement_approval,
-    parse_review_plan_tests_approval,
+    parse_review_plan_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
@@ -29,7 +29,7 @@ from ..phase_gate import (
     phase_content_ready,
     resolve_doc_path,
     resolve_draft_path,
-    review_plan_tests_complete,
+    review_plan_complete,
 )
 from ..state import DevWorkflowState
 
@@ -317,7 +317,7 @@ class NodeRunner:
                     "analyze_requirements": parse_requirement_approval,
                     "create_plan": parse_plan_approval,
                     "design_test_cases": parse_test_cases_approval,
-                    "review_plan_and_tests": parse_review_plan_tests_approval,
+                    "review_plan": parse_review_plan_approval,
                     "split_tasks": parse_tasks_approval,
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
@@ -352,8 +352,8 @@ class NodeRunner:
         output_path: Path,
     ):
         if node_id in _PHASE_NODE_IDS:
-            if node_id == "review_plan_and_tests":
-                return lambda: review_plan_tests_complete(docs_dir, state)
+            if node_id == "review_plan":
+                return lambda: review_plan_complete(docs_dir, state)
             return lambda: phase_complete(docs_dir, node_id, state)
         return lambda: _node_output_complete(node_id, output_path)
 
@@ -429,7 +429,7 @@ class NodeRunner:
             "analyze_requirements": "requirements",
             "create_plan": "plan",
             "design_test_cases": "test_cases",
-            "review_plan_and_tests": "plan_test_review",
+            "review_plan": "plan_review",
             "split_tasks": "tasks",
             "implement_code": "implement",
             "verify_tests": "verify",
