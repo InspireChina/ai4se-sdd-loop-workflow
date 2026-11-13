@@ -15,6 +15,7 @@ from pathlib import Path
 SKILL_NAME = "start-workflow"
 APP_CONFIG_DIR_NAME = "sdd-loop-workflow-config"
 AI_RULES_CONFIG_FILENAME = "ai-rules.yaml"
+SUGGESTION_CONFIDENCE_RULES_FILENAME = "suggestion-confidence-rules.yaml"
 
 # 相对业务项目根 → (目录, --tool 取值)
 AGENT_SKILL_DIRS = {
@@ -151,7 +152,7 @@ def install_app_config(engine: Path, app_root: Path) -> list[str]:
     dest_root = app_root / APP_CONFIG_DIR_NAME
     dest_root.mkdir(parents=True, exist_ok=True)
     actions: list[str] = []
-    preserve_names = {AI_RULES_CONFIG_FILENAME}
+    preserve_names = {AI_RULES_CONFIG_FILENAME, SUGGESTION_CONFIDENCE_RULES_FILENAME}
 
     for src in sorted(src_root.rglob("*")):
         if not src.is_file():

@@ -19,6 +19,7 @@ DEFAULT_AI_RULES_SUBDIR = "ai-rules"
 DEFAULT_DOCS_DIR = "spec"
 DEFAULT_APP_ROOT = ".."
 DEFAULT_TOOL = "claude_code"
+SUGGESTION_CONFIDENCE_RULES_FILENAME = "suggestion-confidence-rules.yaml"
 
 
 @dataclass
@@ -51,6 +52,22 @@ class NodeConfig:
 
 
 @dataclass
+class ScoringRule:
+    condition: str
+    points: float
+    reason: str
+
+
+@dataclass
+class NodeScoringRules:
+    node_id: str
+    description: str
+    base_score: float | None  # None = 未指定，合并时回退引擎基线
+    add_rules: list[ScoringRule] = field(default_factory=list)
+    subtract_rules: list[ScoringRule] = field(default_factory=list)
+
+
+@dataclass
 class WorkflowConfig:
     docs_dir: str
     nodes: dict[str, NodeConfig]
@@ -58,6 +75,7 @@ class WorkflowConfig:
     app_root: str = ".."
     default_tool: str = DEFAULT_TOOL
     default_model: str = ""
+    suggestion_confidence_rules: dict[str, NodeScoringRules] = field(default_factory=dict)
 
 
 def _parse_input(raw: dict[str, str]) -> NodeInput:
@@ -121,6 +139,113 @@ def load_ai_rules_config(app_root: Path) -> tuple[str, dict[str, list[str]]]:
                 node_rules[str(node_id)] = rules
 
     return ai_rules_dir, node_rules
+
+
+def _parse_scoring_rule(raw: Any) -> ScoringRule | None:
+    if not isinstance(raw, dict):
+        return None
+    condition = _as_str(raw.get("condition"))
+    if not condition:
+        return None
+    try:
+        points = float(raw.get("points") or 0.0)
+    except (TypeError, ValueError):
+        points = 0.0
+    reason = _as_str(raw.get("reason"))
+    return ScoringRule(condition=condition, points=points, reason=reason)
+
+
+def _parse_node_scoring_rules(node_id: str, raw: Any) -> NodeScoringRules:
+    if not isinstance(raw, dict):
+        raw = {}
+    base_score: float | None = None
+    if raw.get("base_score") is not None:
+        try:
+            base_score = float(raw.get("base_score"))
+        except (TypeError, ValueError):
+            base_score = None
+    add_rules: list[ScoringRule] = []
+    for item in raw.get("add_rules") or []:
+        rule = _parse_scoring_rule(item)
+        if rule:
+            add_rules.append(rule)
+    subtract_rules: list[ScoringRule] = []
+    for item in raw.get("subtract_rules") or []:
+        rule = _parse_scoring_rule(item)
+        if rule:
+            subtract_rules.append(rule)
+    return NodeScoringRules(
+        node_id=node_id,
+        description=_as_str(raw.get("description")),
+        base_score=base_score,
+        add_rules=add_rules,
+        subtract_rules=subtract_rules,
+    )
+
+
+def _load_scoring_rules_file(path: Path) -> dict[str, NodeScoringRules]:
+    if not path.is_file():
+        return {}
+    with open(path, encoding="utf-8") as f:
+        data: dict[str, Any] = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        return {}
+    nodes_raw = data.get("nodes") or {}
+    if not isinstance(nodes_raw, dict):
+        return {}
+    result: dict[str, NodeScoringRules] = {}
+    for node_id, raw in nodes_raw.items():
+        result[str(node_id)] = _parse_node_scoring_rules(str(node_id), raw)
+    return result
+
+
+def load_suggestion_confidence_rules(
+    app_root: Path, workflow_root: Path
+) -> dict[str, NodeScoringRules]:
+    """加载并合并 suggestion_confidence 打分规则：引擎基线 + 业务扩展。
+
+    合并策略：业务文件中某节点若配置 base_score 则覆盖引擎；add_rules /
+    subtract_rules 叠加到引擎基线之后。业务文件缺失时仅用引擎基线。
+    """
+    engine_path = workflow_root / "config" / SUGGESTION_CONFIDENCE_RULES_FILENAME
+    business_path = (
+        app_config_dir(app_root) / SUGGESTION_CONFIDENCE_RULES_FILENAME
+    )
+    engine_rules = _load_scoring_rules_file(engine_path)
+    business_rules = _load_scoring_rules_file(business_path)
+    if not business_rules:
+        return engine_rules
+
+    merged: dict[str, NodeScoringRules] = {}
+    all_node_ids = set(engine_rules) | set(business_rules)
+    for node_id in all_node_ids:
+        engine = engine_rules.get(node_id)
+        business = business_rules.get(node_id)
+        if engine and business:
+            base = (
+                business.base_score
+                if business.base_score is not None
+                else engine.base_score
+            )
+            merged[node_id] = NodeScoringRules(
+                node_id=node_id,
+                description=business.description or engine.description,
+                base_score=base,
+                add_rules=[*engine.add_rules, *business.add_rules],
+                subtract_rules=[*engine.subtract_rules, *business.subtract_rules],
+            )
+        elif business:
+            base = business.base_score if business.base_score is not None else 0.5
+            merged[node_id] = NodeScoringRules(
+                node_id=business.node_id,
+                description=business.description,
+                base_score=base,
+                add_rules=business.add_rules,
+                subtract_rules=business.subtract_rules,
+            )
+        else:
+            merged[node_id] = engine  # type: ignore[arg-type]
+    return merged
 
 
 def load_app_runtime_settings(app_root: Path) -> dict[str, Any]:
@@ -222,6 +347,10 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
 
     ai_rules_dir, node_extend_rules = load_ai_rules_config(resolved_app)
 
+    suggestion_confidence_rules = load_suggestion_confidence_rules(
+        resolved_app, workflow_root
+    )
+
     nodes: dict[str, NodeConfig] = {}
     for node_id, cfg in nodes_raw.items():
         prompt = str(cfg["prompt"]).strip()
@@ -271,6 +400,7 @@ def load_workflow_config(config_path: Path) -> WorkflowConfig:
         nodes=nodes,
         default_tool=default_tool,
         default_model=default_model,
+        suggestion_confidence_rules=suggestion_confidence_rules,
     )
 
 

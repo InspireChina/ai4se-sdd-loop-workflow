@@ -116,6 +116,10 @@ user_note: ""
 
 **禁止**将字段命名、序列化、具体错误 JSON、控件标签类型、类/包结构等实现细节作为 review 待澄清项（除非需求明文规定）。
 
+**`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算）：
+
+{{suggestion_confidence_rules}}
+
 ### 阶段 2：与用户澄清 review 缺口
 
 1. 在 CLI 中逐条确认清单；每确认一项更新 `resolved` + `answer`

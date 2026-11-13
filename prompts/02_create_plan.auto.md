@@ -61,4 +61,8 @@ items:
 ```
 
 3. `plan_approval` 保持 `pending`（由 review 节点写 approved）
-4. 直接写入 `02-plan.md`；完整 Markdown 必须经写文件工具写入 `{{final_output_path}}`
+4. `suggestion_confidence` 打分依据（按下方规则逐条对照命中后计算；无人值守下虽全部自决，仍按规则给值以便复盘）：
+
+{{suggestion_confidence_rules}}
+
+5. 直接写入 `02-plan.md`；完整 Markdown 必须经写文件工具写入 `{{final_output_path}}`

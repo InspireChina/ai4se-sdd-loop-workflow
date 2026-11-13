@@ -73,6 +73,10 @@
 
 **禁止**将实现细节类问题列入 review 清单（除非需求明文规定）。
 
+**`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算；无人值守下虽全部自决，仍按规则给值以便复盘）：
+
+{{suggestion_confidence_rules}}
+
 ### 阶段 2：自决 review 缺口（禁止提问）
 
 对清单每条 pending 按同一优先级裁决，写回 `resolved` + `answer`，不得残留 pending。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。`suggestion_confidence` 仅作可追溯标记。全部 resolved 后进入阶段 3。

@@ -59,7 +59,8 @@ your-project/
 ├── sdd-loop-workflow-config/     # 业务配置（改这里）
 │   ├── workflow.yaml             # docs_dir + defaults.tool/model（覆盖引擎）
 │   ├── ai-rules.yaml             # 【核心】节点 → 扩展 md 映射
-│   └── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
+│   ├── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
+│   └── suggestion-confidence-rules.yaml  # suggestion_confidence 打分规则（叠加引擎基线）
 └── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
 ```
 
@@ -67,9 +68,10 @@ your-project/
 |------|------|
 | `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + MCP/Rules/Skills 引用 |
 | `workflow.yaml` | `docs_dir`；按节点 `recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
+| `suggestion-confidence-rules.yaml` | `suggestion_confidence` 打分规则（详见 [§6](#6-suggestion_confidence-打分机制)）：引擎通用基线 + 项目扩展叠加 |
 | `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
 
-`sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 保留不覆盖**（避免冲掉项目节点映射）。
+`sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 与 `suggestion-confidence-rules.yaml` 保留不覆盖**（避免冲掉项目自定义）。
 
 跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
 
@@ -286,3 +288,51 @@ nodes:
 | `--model <名>` | 可选；覆盖全部节点 model |
 
 `start-workflow` skill：若读到业务已配 `defaults.tool`（或节点 tool），会给出 **A 不带 `--tool`（推荐）** 与 **B 带 `--tool`（强制本环境）** 两条并说明区别。
+
+## 6. `suggestion_confidence` 打分机制
+
+交互/并行节点（`analyze_requirements` / `create_plan` / `review_plan` / `split_tasks`）在 `clarification_checklist` 里为每条 `suggestion` 评估 `suggestion_confidence`（0-1 浮点）。该值与 `recommendation_threshold` 配合：`>= 阈值` 自动采纳、`< 阈值` 才问用户。
+
+引擎内置通用打分基线 `config/suggestion-confidence-rules.yaml`，业务可在 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml` **叠加**项目专属规则（init 生成，re-init 不覆盖）。
+
+### 打分公式
+
+```
+confidence = clamp(base_score + Σ(add_rules.points) − Σ(subtract_rules.points), 0, 1)
+```
+
+每条规则：`condition`（触发条件，自然语言）/ `points`（正数分值）/ `reason`（依据，AI 在 `suggestion_reason` 里可引用）。
+
+### 合并策略
+
+- `base_score`：业务若配置则**覆盖**引擎基线
+- `add_rules` / `subtract_rules`：**叠加**到引擎基线之后（引擎通用 + 项目扩展）
+- 业务文件留空或不配某节点 = 该节点仅用引擎通用规则
+
+### 怎么扩展（三步）
+
+1. 编辑业务根 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml`。
+2. 在 `nodes.<节点ID>` 下加 `add_rules` / `subtract_rules`（可选 `base_score` 覆盖）。
+3. 保存即可，下次 `sddl start` 自动合并注入。
+
+```yaml
+# sdd-loop-workflow-config/suggestion-confidence-rules.yaml
+nodes:
+  analyze_requirements:
+    base_score: 0.6                # 覆盖引擎基线 0.5
+    add_rules:
+      - condition: "需求来自已确认的 PRD 文档"
+        points: 0.2
+        reason: "有 PRD 背书，推荐把握提升"
+    subtract_rules:
+      - condition: "涉及支付链路"
+        points: 0.3
+        reason: "支付高风险，不宜高置信自决"
+  split_tasks:
+    subtract_rules:
+      - condition: "任务涉及核心交易模块"
+        points: 0.2
+        reason: "核心模块改动需人工确认"
+```
+
+注入位置：各节点 prompt 的 `{{suggestion_confidence_rules}}` 占位符，运行时按当前节点渲染为加分/减分规则清单 + 打分公式。

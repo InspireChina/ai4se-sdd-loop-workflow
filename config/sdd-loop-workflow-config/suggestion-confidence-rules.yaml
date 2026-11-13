@@ -1,0 +1,45 @@
+# =============================================================================
+# SDD Loop Workflow — suggestion_confidence 打分机制（项目自定义扩展）
+# =============================================================================
+# 位置：业务项目根 / sdd-loop-workflow-config / suggestion-confidence-rules.yaml
+# （由 sddl init 生成；已存在时 init 不会覆盖，项目自定义不会丢失）
+#
+# ---------- 作用 ----------
+# 引擎已在 config/suggestion-confidence-rules.yaml 内置通用打分基线。
+# 本文件的规则会**叠加**到引擎基线之上（引擎通用 + 项目扩展）。
+#
+# ---------- 打分公式 ----------
+#   confidence = clamp(base_score + Σ(add_rules.points) − Σ(subtract_rules.points), 0, 1)
+#
+# ---------- 合并策略 ----------
+#   base_score    : 本文件若配置则覆盖引擎基线
+#   add_rules     : 叠加到引擎基线之后
+#   subtract_rules: 叠加到引擎基线之后
+#   留空或不配某节点 = 该节点仅用引擎通用规则
+#
+# ---------- 怎么扩展 ----------
+# 在下方 nodes.<节点ID> 下添加项目专属规则。常用节点 ID：
+#   analyze_requirements / create_plan / review_plan / split_tasks
+# 每条规则：condition（触发条件，自然语言）/ points（正数分值）/ reason（依据）
+#
+# 示例（按需取消注释并改成你们项目的真实规则）：
+#
+# nodes:
+#   analyze_requirements:
+#     base_score: 0.6           # 覆盖引擎基线 0.5
+#     add_rules:
+#       - condition: "需求来自已确认的 PRD 文档"
+#         points: 0.2
+#         reason: "有 PRD 背书，推荐把握提升"
+#     subtract_rules:
+#       - condition: "涉及支付链路"
+#         points: 0.3
+#         reason: "支付高风险，不宜高置信自决"
+#   split_tasks:
+#     subtract_rules:
+#       - condition: "任务涉及核心交易模块"
+#         points: 0.2
+#         reason: "核心模块改动需人工确认"
+# =============================================================================
+
+nodes: {}

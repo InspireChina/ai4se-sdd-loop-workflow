@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..agents.registry import get_ai_tool
-from ..config_loader import NodeConfig, WorkflowConfig
+from ..config_loader import NodeConfig, NodeScoringRules, WorkflowConfig
 from ..requirement_dir import resolve_app_root, resolve_docs_path
 from ..ai_rules_loader import build_ai_rules_prompt
 from ..parsers.clarification_parser import parse_clarification_checklist
@@ -31,6 +31,52 @@ from ..phase_gate import (
 from ..state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
+
+EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 打分规则；按你的整体把握给 0-1 浮点，无法评估写 0.0）"
+
+
+def _format_rule_list(rules: list, sign: str) -> list[str]:
+    lines: list[str] = []
+    for rule in rules:
+        lines.append(
+            f"  - {sign}{rule.points:.1f}　{rule.condition}"
+            + (f"（{rule.reason}）" if rule.reason else "")
+        )
+    return lines
+
+
+def build_suggestion_confidence_prompt(
+    scoring_rules: dict[str, NodeScoringRules],
+    node_id: str,
+) -> str:
+    """把当前节点的 suggestion_confidence 打分规则渲染为可注入 prompt 的文本。"""
+    rules = scoring_rules.get(node_id)
+    if not rules:
+        return EMPTY_SCORING_HINT
+
+    base = rules.base_score if rules.base_score is not None else 0.5
+    lines: list[str] = []
+    if rules.description:
+        lines.append(f"**节点**：{rules.description}")
+    lines.append(f"**起始分 base_score**：{base:.2f}")
+    lines.append("")
+    lines.append("**加分规则 add_rules**（命中即加分）：")
+    if rules.add_rules:
+        lines.extend(_format_rule_list(rules.add_rules, "+"))
+    else:
+        lines.append("  - （无）")
+    lines.append("")
+    lines.append("**减分规则 subtract_rules**（命中即减分）：")
+    if rules.subtract_rules:
+        lines.extend(_format_rule_list(rules.subtract_rules, "−"))
+    else:
+        lines.append("  - （无）")
+    lines.append("")
+    lines.append(
+        f"**打分公式**：confidence = clamp({base:.2f} + Σ加分 − Σ减分, 0, 1)；"
+        "逐条对照命中后计算，并在 `suggestion_reason` 注明命中的规则依据。"
+    )
+    return "\n".join(lines)
 
 _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
 _CODE_WORK_NODES = frozenset(
@@ -552,6 +598,11 @@ class NodeRunner:
 
         context["recommendation_threshold"] = str(
             node_cfg.recommendation_threshold
+        )
+
+        context["suggestion_confidence_rules"] = build_suggestion_confidence_prompt(
+            self.workflow_config.suggestion_confidence_rules,
+            node_cfg.node_id,
         )
 
         return context

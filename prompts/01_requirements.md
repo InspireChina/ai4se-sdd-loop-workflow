@@ -109,6 +109,10 @@ user_note: ""
 - `pending_count` 必须等于 `status: pending` 的条目数
 - **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
 - **`suggestion_confidence`（0-1 浮点）**：表示你对该推荐为正确方案的把握程度；无法评估时写 `0.0`。当前推荐强度阈值 = `{{recommendation_threshold}}`
+- **`suggestion_confidence` 打分依据**（按下方规则逐条对照命中后计算）：
+
+{{suggestion_confidence_rules}}
+
 - **面向用户的所有字段（`question` / `suggestion` / `suggestion_reason` / `answer`）必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法直接看懂的标识；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
 YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、范围、角色场景、功能/非功能需求、变更影响、验收标准等章节；初稿阶段允许留待确认标记）。
