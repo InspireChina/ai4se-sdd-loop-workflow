@@ -619,6 +619,8 @@ class NodeRunner:
                         qid = raw.get("id", "")
                         question = raw.get("question", "")
                         lines.append(f"- [{qid}] {question}")
+                        if raw.get("as_is"):
+                            lines.append(f"  - 现状(AS-IS)：{raw['as_is']}")
                         if raw.get("why_it_matters"):
                             lines.append(f"  - 原因：{raw['why_it_matters']}")
                         if raw.get("suggestion"):

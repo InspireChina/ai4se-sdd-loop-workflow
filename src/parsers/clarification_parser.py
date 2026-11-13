@@ -18,6 +18,7 @@ class ClarificationItem:
     why_it_matters: str = ""
     category: str = ""
     answer: str = ""
+    as_is: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -28,6 +29,7 @@ class ClarificationItem:
             "why_it_matters": self.why_it_matters,
             "category": self.category,
             "answer": self.answer,
+            "as_is": self.as_is,
         }
 
     @classmethod
@@ -40,6 +42,7 @@ class ClarificationItem:
             why_it_matters=str(data.get("why_it_matters", "")).strip(),
             category=str(data.get("category", "")).strip(),
             answer=str(data.get("answer", "")).strip(),
+            as_is=str(data.get("as_is", "")).strip(),
         )
 
 
