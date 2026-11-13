@@ -13,15 +13,11 @@ nodes:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8
-  create_plan:
+  plan_session:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8
   design_test_cases:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.8
-  review_plan:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8

@@ -9,7 +9,6 @@ from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.approval_parser import (
     parse_plan_approval,
     parse_requirement_approval,
-    parse_review_plan_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
@@ -18,11 +17,9 @@ from .parsers.test_report_parser import parse_test_passed
 from .parsers.workflow_status_parser import WorkflowStatus, parse_workflow_status_file
 from .phase_gate import (
     phase_complete,
-    phase_content_ready,
-    plan_and_tests_content_ready,
+    plan_session_complete,
     requirements_complete,
     requirements_content_ready,
-    review_plan_complete,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,19 +31,15 @@ RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
     ("05-test-report.md", "ai_review"),
     ("04-implementation.md", "verify_tests"),
     ("03-tasks.md", "implement_code"),
-    ("02-plan-review.md", "split_tasks"),
-    ("02-test-cases.md", "review_plan"),
-    ("02-plan.md", "parallel_plan_and_tests"),
-    ("01-requirements.md", "parallel_plan_and_tests"),
+    ("02-test-cases.md", "plan_session"),
+    ("02-plan.md", "plan_session"),
+    ("01-requirements.md", "plan_session"),
 ]
 
 ROUTABLE_NODES = frozenset(
     {
         "analyze_requirements",
-        "parallel_plan_and_tests",
-        "create_plan",
-        "design_test_cases",
-        "review_plan",
+        "plan_session",
         "split_tasks",
         "implement_code",
         "verify_tests",
@@ -54,11 +47,6 @@ ROUTABLE_NODES = frozenset(
         "commit_code",
     }
 )
-
-_LEGACY_NODE_ALIASES = {
-    "create_plan": "parallel_plan_and_tests",
-}
-
 
 def _gate_state(*, skip_clarification: bool = False, auto: bool = False) -> dict:
     return {"skip_clarification": skip_clarification or auto, "auto": auto}
@@ -89,41 +77,31 @@ def determine_start_node(
         )
         if start:
             logger.info("续跑：基于 %s → 从节点 %s 开始", filename, start)
-            return _normalize_start_node(start)
+            return start
 
         if fallback_node:
             adjusted = _adjust_fallback(
                 filename, fallback_node, path.parent, skip_clarification, auto=auto
             )
             logger.info("续跑：发现 %s（无状态表）→ 从 %s 开始", filename, adjusted)
-            return _normalize_start_node(adjusted)
+            return adjusted
 
     return "analyze_requirements"
-
-
-def _normalize_start_node(node: str) -> str:
-    return _LEGACY_NODE_ALIASES.get(node, node)
 
 
 def _resolve_plan_tests_phase_start(
     docs_dir: Path, skip_clarification: bool, *, auto: bool = False
 ) -> str | None:
-    """03-tasks 之前：plan + test-cases + review 阶段的续跑入口。"""
+    """03-tasks 之前：计划会话的续跑入口。"""
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
-    review_path = docs_dir / "02-plan-review.md"
     plan_path = docs_dir / "02-plan.md"
     tests_path = docs_dir / "02-test-cases.md"
 
-    if review_path.exists():
-        if review_plan_complete(docs_dir, state):
-            return "split_tasks"
-        return "review_plan"
-
-    if plan_path.exists() and tests_path.exists():
-        return "review_plan"
+    if plan_session_complete(docs_dir, state):
+        return "split_tasks"
 
     if plan_path.exists() or tests_path.exists():
-        return "parallel_plan_and_tests"
+        return "plan_session"
 
     return None
 
@@ -165,14 +143,6 @@ def restore_state_from_docs(
             )
         )
 
-    review = docs_dir / "02-plan-review.md"
-    if review.exists():
-        restored.update(
-            parse_review_plan_approval(review.read_text(encoding="utf-8")).to_state(
-                "review_plan_approved"
-            )
-        )
-
     tasks = docs_dir / "03-tasks.md"
     if tasks.exists():
         restored.update(
@@ -208,19 +178,8 @@ def _adjust_fallback(
     if filename == "01-requirements.md":
         if not requirements_complete(docs_dir, state):
             return "analyze_requirements"
-    if filename == "02-plan.md":
-        tests_path = docs_dir / "02-test-cases.md"
-        if tests_path.exists():
-            return "review_plan"
-        return "parallel_plan_and_tests"
-    if filename == "02-test-cases.md":
-        plan_path = docs_dir / "02-plan.md"
-        if plan_path.exists():
-            return "review_plan"
-        return "parallel_plan_and_tests"
-    if filename == "02-plan-review.md":
-        if not review_plan_complete(docs_dir, state):
-            return "review_plan"
+    if filename in ("02-plan.md", "02-test-cases.md"):
+        return "plan_session"
     if filename == "03-tasks.md":
         if not phase_complete(docs_dir, "split_tasks", state):
             return "split_tasks"
@@ -258,15 +217,9 @@ def _resolve_from_status(
 
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     if status.next_node in ROUTABLE_NODES:
-        if filename == "01-requirements.md" and status.next_node in (
-            "create_plan",
-            "parallel_plan_and_tests",
-        ):
+        if filename == "01-requirements.md" and status.next_node == "plan_session":
             if not requirements_complete(docs_dir, state):
                 return "analyze_requirements"
-        if filename == "02-plan-review.md" and status.next_node == "split_tasks":
-            if not review_plan_complete(docs_dir, state):
-                return "review_plan"
         if filename == "03-tasks.md" and status.next_node == "implement_code":
             if not phase_complete(docs_dir, "split_tasks", state):
                 return "split_tasks"
@@ -306,7 +259,7 @@ def _infer_from_status_fields(
         if status.pending_count > 0 and not skip:
             return "analyze_requirements"
         if requirements_complete(docs_dir, state):
-            return "parallel_plan_and_tests"
+            return "plan_session"
         if requirements_content_ready(docs_dir, state):
             return "analyze_requirements"
         return "analyze_requirements"
@@ -315,11 +268,6 @@ def _infer_from_status_fields(
         return _resolve_plan_tests_phase_start(
             docs_dir, skip_clarification, auto=auto
         )
-
-    if filename == "02-plan-review.md":
-        if review_plan_complete(docs_dir, state):
-            return "split_tasks"
-        return "review_plan"
 
     if filename == "03-tasks.md":
         if phase_complete(docs_dir, "split_tasks", state):
@@ -342,7 +290,7 @@ def _infer_without_status(
         if pending > 0 and not skip:
             return "analyze_requirements"
         if requirements_complete(path.parent, state):
-            return "parallel_plan_and_tests"
+            return "plan_session"
         if requirements_content_ready(path.parent, state):
             return "analyze_requirements"
         metadata = parse_requirement_metadata(content)
@@ -350,7 +298,7 @@ def _infer_without_status(
             return "analyze_requirements"
         return "analyze_requirements"
 
-    if filename in ("02-plan.md", "02-test-cases.md", "02-plan-review.md"):
+    if filename in ("02-plan.md", "02-test-cases.md"):
         return _resolve_plan_tests_phase_start(
             path.parent, skip_clarification, auto=auto
         )

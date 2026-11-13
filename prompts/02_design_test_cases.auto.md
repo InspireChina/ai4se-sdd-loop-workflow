@@ -1,5 +1,5 @@
-> **运行模式：无人值守（--auto）并行初稿** — 不与用户交互。覆盖不确定项写入 checklist（带可采纳的 `suggestion`），交由 **QA 异步 review** 消解。`test_cases_approval` 保持 `pending`。
-> **测试用例的 review 不在核心流程内**：本节点只产出用例初稿；QA 在自己机器上异步 review 后手动更新 `02-test-cases.md` 的 `test_cases_approval`。该状态不阻塞核心流程，引擎也不会在核心 gate 中等待它。
+> **运行模式：无人值守（--auto）并行初稿** — 不与用户交互。覆盖不确定项写入 checklist（带可采纳的 `suggestion`）。正文写完后，最后才把 `test_cases_approval.status` 写成 `pending`。
+> **`pending` 的意思**：AI 已经写完，等待人工澄清。写的过程中不要先放这个确认块。QA 以后把 `status` 改成 `approved`；没改也不挡任务拆分。引擎要看到 `pending` 或 `approved` 才认为用例写完。
 > **工程规范与人工介入版相同**：用例少而精、勿过度设计、不绑实现细节——仅不确定项留给 review 无人值守消解。
 
 你是一名 QA 架构师。请根据**已定稿需求**，输出**测试用例文档初稿**。
@@ -46,6 +46,6 @@
 
 1. 覆盖验收标准：`TC-UNIT-*`、`TC-API-*`，可追溯
 2. 用例总览、明细、追溯关系齐全
-3. `test_cases_approval` 保持 `pending`
+3. 正文写完后，最后一次写入才加上 `test_cases_approval`，`status` 写 `pending`。这表示 AI 写完、等待人工澄清。写的过程中不要先放这个块
 4. 不确定项写入待 review 清单（每条带清晰 `suggestion` 并配 `suggestion_reason` 写明推荐依据；用自然语言完整描述，禁止 `d2`/`m0` 等代号指代模块/规则/配置，须写全名 + 一句话说明）
 5. 直接写入 `02-test-cases.md`；完整内容经写文件工具写入 `{{final_output_path}}`

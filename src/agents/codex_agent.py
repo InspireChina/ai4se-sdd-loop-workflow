@@ -65,6 +65,7 @@ class CodexTool(AITool):
 
         cmd = [
             binary,
+            *self._plan_session_agent_flags(node_id),
             "exec",
             "-C",
             str(workspace),
@@ -138,6 +139,7 @@ class CodexTool(AITool):
 
         cmd = [
             binary,
+            *self._plan_session_agent_flags(node_id),
             "-C",
             str(workspace),
             *_INTERACTIVE_BYPASS_FLAGS,
@@ -167,6 +169,13 @@ class CodexTool(AITool):
                 success=False,
                 message=f"Codex CLI 不可用，prompt 已保存至 {prompt_file}",
             )
+
+    @staticmethod
+    def _plan_session_agent_flags(node_id: str | None) -> list[str]:
+        """计划会话要在会话内调用 spawn_agent，显式打开 multi_agent。"""
+        if node_id == "plan_session":
+            return ["--enable", "multi_agent"]
+        return []
 
     @staticmethod
     def _workspace_root(prompt_file: Path, cwd: str) -> Path:

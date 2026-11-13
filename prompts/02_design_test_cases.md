@@ -1,5 +1,6 @@
-> **运行模式：需要人工 review（并行初稿）** — 本节点 headless，不与用户交互；覆盖/策略不确定项写入待 review 清单。`test_cases_approval` 保持 `pending`。
-> **测试用例的 review 不在核心流程内**：本节点只产出用例初稿；QA 在自己机器上异步 review 后，手动将 `02-test-cases.md` 的 `test_cases_approval` 改为 `approved`。该状态不阻塞 task 拆分与后续核心流程。
+> **运行模式：需要人工 review（并行初稿）** — 本节点不与用户交互。先写完用例正文，最后才把 `test_cases_approval.status` 写成 `pending`。
+> **`pending` 的意思**：AI 已经写完，文档进入等待人工澄清。写的过程中不要先放这个确认块。
+> **人工澄清不挡核心流程**：QA 异步 review 后，手动把 `status` 改成 `approved`。没改成 `approved` 也不挡任务拆分；引擎只等这个块出现，用来确认 AI 写完了。
 
 你是一名 QA 架构师。请根据**已定稿需求**，输出**测试用例文档初稿**。
 
@@ -64,7 +65,7 @@
    - **API 测试** `TC-API-*`（HTTP 契约；正常/异常/边界）
    - 与验收条目可追溯
 2. 须包含：用例总览、单元/API 明细、追溯关系
-3. 文档必须包含：
+3. 正文（用例总览、明细、追溯、待确认项）都写完之后，最后一次更新才写入确认块。这之前不要写 `test_cases_approval`。写上 `pending` 表示你已经写完，交给人工澄清：
 
 ```yaml test_cases_approval
 status: pending
@@ -74,4 +75,4 @@ user_note: ""
 
 4. 业务场景或覆盖范围不确定时列出「待 review 确认项」；**不要**写实现细节类问题。每条确认项须：用自然语言完整描述（禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明），给出 `suggestion` 并配 `suggestion_reason`（推荐依据：哪条规则 / 与现网一致性 / 权衡），不得只给结论
 5. 用例以**用户可感知行为**描述；直接写入 `02-test-cases.md`
-6. 完整 Markdown 必须经写文件工具写入 `{{final_output_path}}`
+6. 完整 Markdown 必须经写文件工具写入 `{{final_output_path}}`。确认块是收尾动作，不是开头模板。

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .parsers.approval_parser import parse_approval
+from .parsers.approval_parser import parse_approval, read_approval_status
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
 from .state import DevWorkflowState
@@ -21,7 +21,7 @@ class PhaseConfig:
     next_node: str
     min_body_chars: int = 120
     requires_approval: bool = True
-    # True：允许 clarification_checklist 仍有 pending（留给下游 review 澄清）
+    # True：允许 clarification_checklist 仍有 pending（用例等人澄清，不挡计划会话结束）
     allow_unresolved_checklist: bool = False
 
 
@@ -35,36 +35,26 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         final_file="01-requirements.md",
         approval_block="requirement_approval",
         approval_state_key="requirement_approved",
-        next_node="parallel_plan_and_tests",
+        next_node="plan_session",
         min_body_chars=200,
-    ),
-    "create_plan": PhaseConfig(
-        node_id="create_plan",
-        final_file="02-plan.md",
-        approval_block="plan_approval",
-        approval_state_key="plan_approved",
-        next_node="review_plan",
-        min_body_chars=200,
-        requires_approval=False,
-        allow_unresolved_checklist=True,
     ),
     "design_test_cases": PhaseConfig(
         node_id="design_test_cases",
         final_file="02-test-cases.md",
         approval_block="test_cases_approval",
         approval_state_key="test_cases_approved",
-        next_node="review_plan",
+        next_node="plan_session",
         min_body_chars=200,
         requires_approval=False,
         allow_unresolved_checklist=True,
     ),
-    "review_plan": PhaseConfig(
-        node_id="review_plan",
-        final_file="02-plan-review.md",
-        approval_block="review_plan_approval",
-        approval_state_key="review_plan_approved",
+    "plan_session": PhaseConfig(
+        node_id="plan_session",
+        final_file="02-plan.md",
+        approval_block="plan_approval",
+        approval_state_key="plan_approved",
         next_node="split_tasks",
-        min_body_chars=120,
+        min_body_chars=200,
     ),
     "split_tasks": PhaseConfig(
         node_id="split_tasks",
@@ -100,6 +90,18 @@ def _validate_requirements_final(content: str) -> bool:
     return metadata.requirement_type in ("new", "existing_change")
 
 
+def _validate_test_cases_final(content: str, cfg: PhaseConfig) -> bool:
+    """用例写完的标志是确认块落成 pending 或 approved。
+
+    pending：AI 已写完，等待人工澄清。approved：人已经确认。
+    块还没写出来表示仍在写，不能放行。
+    """
+    if not _validate_generic_final(content, cfg):
+        return False
+    status = read_approval_status(content, "test_cases_approval")
+    return status in ("pending", "approved")
+
+
 def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
     body = _body_without_status(content)
     if len(body) < cfg.min_body_chars:
@@ -110,9 +112,8 @@ def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
 CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
     "analyze_requirements": lambda content, cfg: _validate_generic_final(content, cfg)
     and _validate_requirements_final(content),
-    "create_plan": _validate_generic_final,
-    "design_test_cases": _validate_generic_final,
-    "review_plan": _validate_generic_final,
+    "design_test_cases": _validate_test_cases_final,
+    "plan_session": _validate_generic_final,
     "split_tasks": _validate_generic_final,
 }
 
@@ -120,7 +121,7 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
 def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -> bool:
     """定稿 md 结构完整（正文达标）；默认还要求澄清清单已消解。
 
-    create_plan / design_test_cases 可带 pending 进入 review（allow_unresolved_checklist）。
+    design_test_cases 允许澄清清单仍有 pending（allow_unresolved_checklist）。
     """
     cfg = PHASE_CONFIGS.get(node_id)
     if not cfg:
@@ -164,25 +165,16 @@ def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> boo
     return phase_user_approved(docs_dir, node_id)
 
 
-def plan_and_tests_content_ready(docs_dir: Path, state: DevWorkflowState) -> bool:
-    return phase_content_ready(docs_dir, "create_plan", state) and phase_content_ready(
-        docs_dir, "design_test_cases", state
-    )
+def plan_session_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
+    """计划会话结束：`02-plan.md` 已确认，且用例已写完。
 
-
-def review_plan_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
-    """Review plan 节点完成：review 定稿确认，且 plan 已同步确认。
-
-    注：test-cases 的 review 由 QA 异步进行，不阻塞核心流程，此处不检查 test_cases_approved。
+    用例写完的标志是 `test_cases_approval` 为 `pending`（等待人工澄清）或 `approved`。
+    不要求人已经把用例改成 `approved`。
     """
-    if not phase_complete(docs_dir, "review_plan", state):
+    if not phase_complete(docs_dir, "plan_session", state):
         return False
-    if state.get("auto"):
-        return True
-    return phase_user_approved(docs_dir, "create_plan")
+    return phase_content_ready(docs_dir, "design_test_cases", state)
 
-
-# --- 兼容旧 API ---
 
 def requirements_content_ready(docs_dir: Path, state: DevWorkflowState) -> bool:
     return phase_content_ready(docs_dir, "analyze_requirements", state)

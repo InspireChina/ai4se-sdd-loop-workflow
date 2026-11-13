@@ -1,7 +1,6 @@
 """LangGraph workflow 编排 — 节点与边在代码中固定定义。"""
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from langgraph.graph import END, StateGraph
@@ -9,10 +8,10 @@ from langgraph.graph import END, StateGraph
 from .config_loader import load_workflow_config
 from .nodes.node_runner import NodeRunner
 from .phase_gate import (
-    plan_and_tests_content_ready,
     phase_complete,
+    phase_content_ready,
+    plan_session_complete,
     requirements_complete,
-    review_plan_complete,
 )
 from .requirement_dir import (
     resolve_app_root,
@@ -24,9 +23,6 @@ from .router import determine_start_node, is_workflow_complete, restore_state_fr
 from .state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
-
-_PARALLEL_BRANCHES = ("create_plan", "design_test_cases")
-
 
 class DevWorkflow:
     def __init__(self, project_root: Path, config_path: Path | None = None):
@@ -44,33 +40,34 @@ class DevWorkflow:
     def analyze_requirements(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("analyze_requirements", state)
 
-    def parallel_plan_and_tests(self, state: DevWorkflowState) -> DevWorkflowState:
-        """并行 headless：create_plan + design_test_cases（线程池，完成后进入 review）。"""
+    def plan_session(self, state: DevWorkflowState) -> DevWorkflowState:
+        """一次交互会话写计划并完成澄清。用例由该工具自己的后台 subagent 写。"""
         docs_dir = self._resolve_docs_path(state)
-        if plan_and_tests_content_ready(docs_dir, state):
-            logger.info("plan 与 test-cases 已就绪，跳过并行生成")
-            return {"current_node": "parallel_plan_and_tests"}
+        if plan_session_complete(docs_dir, state):
+            logger.info("计划已确认且用例已就绪，跳过计划会话")
+            return {"current_node": "plan_session"}
 
-        merged: DevWorkflowState = {}
+        merged = self.node_runner.run_node("plan_session", state)
         errors: list[str] = []
+        if merged.get("last_error"):
+            errors.append(str(merged["last_error"]))
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = {
-                pool.submit(self.node_runner.run_node, node_id, state): node_id
-                for node_id in _PARALLEL_BRANCHES
-            }
-            for future in as_completed(futures):
-                node_id = futures[future]
-                try:
-                    branch_updates = future.result()
-                    merged = self._merge_branch_updates(merged, branch_updates)
-                except Exception as exc:
-                    logger.exception("并行节点 %s 失败", node_id)
-                    errors.append(f"{node_id}: {exc}")
+        adopted = self.node_runner.adopt_existing_output(
+            "design_test_cases", {**state, **merged}
+        )
+        if adopted.get("last_error") and phase_content_ready(
+            docs_dir, "design_test_cases", state
+        ):
+            adopted = {k: v for k, v in adopted.items() if k != "last_error"}
+        merged = self._merge_branch_updates(merged, adopted)
 
+        if not phase_content_ready(docs_dir, "design_test_cases", {**state, **merged}):
+            errors.append("design_test_cases 产出未就绪")
         if errors:
-            merged["last_error"] = "; ".join(errors)
-        merged["current_node"] = "parallel_plan_and_tests"
+            merged["last_error"] = "; ".join(dict.fromkeys(errors))
+        elif "last_error" in merged:
+            merged["last_error"] = None
+        merged["current_node"] = "plan_session"
         return merged
 
     @staticmethod
@@ -90,12 +87,6 @@ class DevWorkflow:
             else:
                 result[key] = value
         return result
-
-    def review_plan(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("review_plan", state)
-
-    def create_plan(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("create_plan", state)
 
     def split_tasks(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("split_tasks", state)
@@ -118,18 +109,12 @@ class DevWorkflow:
     def _route_after_analyze(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
         if requirements_complete(docs_dir, state):
-            return "parallel_plan_and_tests"
+            return "plan_session"
         return END
 
-    def _route_after_parallel(self, state: DevWorkflowState) -> str:
+    def _route_after_plan_session(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
-        if plan_and_tests_content_ready(docs_dir, state):
-            return "review_plan"
-        return END
-
-    def _route_after_review(self, state: DevWorkflowState) -> str:
-        docs_dir = self._resolve_docs_path(state)
-        if review_plan_complete(docs_dir, state):
+        if plan_session_complete(docs_dir, state):
             return "split_tasks"
         return END
 
@@ -153,9 +138,7 @@ class DevWorkflow:
 
         workflow.add_node("route_next", self.route_next)
         workflow.add_node("analyze_requirements", self.analyze_requirements)
-        workflow.add_node("parallel_plan_and_tests", self.parallel_plan_and_tests)
-        workflow.add_node("review_plan", self.review_plan)
-        workflow.add_node("create_plan", self.create_plan)
+        workflow.add_node("plan_session", self.plan_session)
         workflow.add_node("split_tasks", self.split_tasks)
         workflow.add_node("implement_code", self.implement_code)
         workflow.add_node("verify_tests", self.verify_tests)
@@ -168,9 +151,7 @@ class DevWorkflow:
             self._route_from_start,
             {
                 "analyze_requirements": "analyze_requirements",
-                "parallel_plan_and_tests": "parallel_plan_and_tests",
-                "review_plan": "review_plan",
-                "create_plan": "create_plan",
+                "plan_session": "plan_session",
                 "split_tasks": "split_tasks",
                 "implement_code": "implement_code",
                 "verify_tests": "verify_tests",
@@ -182,21 +163,13 @@ class DevWorkflow:
             "analyze_requirements",
             self._route_after_analyze,
             {
-                "parallel_plan_and_tests": "parallel_plan_and_tests",
+                "plan_session": "plan_session",
                 END: END,
             },
         )
         workflow.add_conditional_edges(
-            "parallel_plan_and_tests",
-            self._route_after_parallel,
-            {
-                "review_plan": "review_plan",
-                END: END,
-            },
-        )
-        workflow.add_conditional_edges(
-            "review_plan",
-            self._route_after_review,
+            "plan_session",
+            self._route_after_plan_session,
             {
                 "split_tasks": "split_tasks",
                 END: END,
@@ -307,7 +280,6 @@ class DevWorkflow:
             "requirement_approved": False,
             "plan_approved": False,
             "test_cases_approved": False,
-            "review_plan_approved": False,
             "tasks_approved": False,
             "test_passed": False,
             "last_error": None,

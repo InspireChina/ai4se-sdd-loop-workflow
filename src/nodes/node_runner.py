@@ -5,7 +5,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from ..agents.base import AIToolResult
+from ..agents.prompt_file import save_node_prompt
 from ..agents.registry import get_ai_tool
+from ..agents.subagent_delegation import (
+    testcase_delegation,
+    testcase_ready_note,
+)
 from ..config_loader import NodeConfig, NodeScoringRules, WorkflowConfig
 from ..requirement_dir import resolve_app_root, resolve_docs_path
 from ..ai_rules_loader import build_ai_rules_prompt
@@ -13,7 +19,6 @@ from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_plan_approval,
     parse_requirement_approval,
-    parse_review_plan_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
@@ -29,8 +34,8 @@ from ..phase_gate import (
     get_phase_config,
     phase_complete,
     phase_content_ready,
+    plan_session_complete,
     resolve_doc_path,
-    review_plan_complete,
 )
 from ..state import DevWorkflowState
 
@@ -353,9 +358,8 @@ class NodeRunner:
                         updates.update(metadata.to_state_updates())
                 approval_parser = {
                     "analyze_requirements": parse_requirement_approval,
-                    "create_plan": parse_plan_approval,
                     "design_test_cases": parse_test_cases_approval,
-                    "review_plan": parse_review_plan_approval,
+                    "plan_session": parse_plan_approval,
                     "split_tasks": parse_tasks_approval,
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
@@ -384,8 +388,8 @@ class NodeRunner:
         output_path: Path,
     ):
         if node_id in _PHASE_NODE_IDS:
-            if node_id == "review_plan":
-                return lambda: review_plan_complete(docs_dir, state)
+            if node_id == "plan_session":
+                return lambda: plan_session_complete(docs_dir, state)
             return lambda: phase_complete(docs_dir, node_id, state)
         return lambda: _node_output_complete(node_id, output_path)
 
@@ -456,9 +460,8 @@ class NodeRunner:
 
         phase_labels = {
             "analyze_requirements": "requirements",
-            "create_plan": "plan",
             "design_test_cases": "test_cases",
-            "review_plan": "plan_review",
+            "plan_session": "plan",
             "split_tasks": "tasks",
             "implement_code": "implement",
             "verify_tests": "verify",
@@ -468,7 +471,10 @@ class NodeRunner:
         phase = phase_labels.get(node_id, node_id)
         next_node = ""
 
-        if node_id in PHASE_CONFIGS:
+        if node_id == "plan_session":
+            ready = plan_session_complete(docs_dir, state)
+            next_node = "split_tasks" if ready else "plan_session"
+        elif node_id in PHASE_CONFIGS:
             cfg = PHASE_CONFIGS[node_id]
             if cfg.requires_approval:
                 ready = phase_complete(docs_dir, node_id, state)
@@ -487,7 +493,7 @@ class NodeRunner:
         if skip and node_id == "analyze_requirements" and phase_complete(
             docs_dir, "analyze_requirements", state
         ):
-            next_node = "parallel_plan_and_tests"
+            next_node = "plan_session"
 
         test_passed = None
         if node_id == "verify_tests":
@@ -523,6 +529,72 @@ class NodeRunner:
         if node_id in _CODE_WORK_NODES:
             return self.app_root
         return self.project_root
+
+    def adopt_existing_output(self, node_id: str, state: DevWorkflowState) -> DevWorkflowState:
+        """subagent 已经把文件写好时，补审批解析和 Workflow 状态，不再起 CLI。"""
+        node_cfg = self.workflow_config.nodes[node_id]
+        docs_dir = self._resolve_docs_dir(state)
+        output_path = docs_dir / node_cfg.output_file
+        if not phase_content_ready(docs_dir, node_id, state):
+            return {"last_error": f"{node_id} 产出未就绪（{output_path}）"}
+
+        content = output_path.read_text(encoding="utf-8")
+        app_root = resolve_app_root(
+            self.project_root,
+            state.get("app_root") or self.workflow_config.app_root,
+        )
+        try:
+            rel = str(output_path.relative_to(app_root))
+        except ValueError:
+            rel = str(output_path)
+        updates: DevWorkflowState = {
+            "current_node": node_id,
+            "node_outputs": {node_id: rel},
+            "completed_nodes": [node_id],
+        }
+        updates.update(self._parse_node_outputs(node_id, content, docs_dir))
+        merged = {**state, **updates}
+        status = self._build_workflow_status(
+            node_id, merged, docs_dir, success=True
+        )
+        result = AIToolResult(
+            content=content,
+            tool_name=node_cfg.tool,
+            success=True,
+            message="subagent 已写入",
+        )
+        self._finalize_headless_outputs(
+            docs_dir,
+            node_cfg,
+            output_path=output_path,
+            body_content=content,
+            result=result,
+            status=status,
+        )
+        return updates
+
+    def _testcase_delegation_block(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_dir(state)
+        output_path = docs_dir / "02-test-cases.md"
+        if phase_content_ready(docs_dir, "design_test_cases", state):
+            return testcase_ready_note(output_path)
+
+        tool_name = self.workflow_config.nodes["plan_session"].tool
+        test_prompt = self._render_node_prompt("design_test_cases", state)
+        prompt_file = save_node_prompt(
+            test_prompt,
+            str(self._agent_cwd("plan_session")),
+            node_id="design_test_cases",
+            prompt_dir=str(docs_dir),
+        )
+        return testcase_delegation(tool_name, prompt_file, output_path)
+
+    def _render_node_prompt(self, node_id: str, state: DevWorkflowState) -> str:
+        node_cfg = self.workflow_config.nodes[node_id]
+        docs_dir = self._resolve_docs_dir(state)
+        auto = bool(state.get("auto"))
+        template = self._load_prompt(node_cfg.resolve_prompt_file(auto))
+        return self._render_prompt(template, self._build_context(node_cfg, state, docs_dir))
 
     def _load_prompt(self, prompt_file: str) -> str:
         path = self.project_root / prompt_file
@@ -611,6 +683,8 @@ class NodeRunner:
             self.workflow_config.suggestion_confidence_rules,
             node_cfg.node_id,
         )
+        if node_cfg.node_id == "plan_session":
+            context["subagent_delegation"] = self._testcase_delegation_block(state)
 
         return context
 

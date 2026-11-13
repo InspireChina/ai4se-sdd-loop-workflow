@@ -45,7 +45,6 @@ class DevWorkflowState(TypedDict, total=False):
     requirement_approved: bool
     plan_approved: bool
     test_cases_approved: bool
-    review_plan_approved: bool
     tasks_approved: bool
     resume_from_node: str
     test_passed: bool

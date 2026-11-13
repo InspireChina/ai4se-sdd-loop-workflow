@@ -96,14 +96,13 @@ your-project/
 ## 3. 有哪些节点
 
 ```text
-需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试 → AI Review → 提交
+需求 → 计划会话（交互写计划并澄清；主会话按工具拉起后台 subagent 写用例）→ 任务拆分 → 实现 → 测试 → AI Review → 提交
 ```
 
 | 节点 | 产出 | 做什么 |
 |------|------|--------|
 | 需求分析 | `01-requirements.md` | 澄清与定稿 |
-| 制定计划 / 设计用例 | `02-plan.md`、`02-test-cases.md` | 并行初稿 |
-| 计划评审 | `02-plan-review.md` | 只 review 计划并确认；用例 review 由 QA 异步进行，不阻塞核心流程 |
+| 计划与澄清 | `02-plan.md` | 一次交互会话只写这一份计划：写完、问完、用户确认。会话开场按当前工具拉起后台 subagent 另写 `02-test-cases.md` |
 | 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
 | 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
 | 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
@@ -117,11 +116,11 @@ your-project/
 
 ### QA 异步 review 测试用例（不阻塞核心流）
 
-核心流程只 review **计划**（`review_plan` 节点），**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
+核心流程只在计划会话里确认 **计划**，**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
 
-- `design_test_cases` 节点 headless 产出 `02-test-cases.md` 初稿，其顶部 `test_cases_approval.status` 保持 `pending`。
+- 用例写到 `02-test-cases.md`。正文写完后，AI 才把 `test_cases_approval.status` 写成 `pending`，表示写完了、等人工澄清。没有这个确认块，计划会话不结束。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
 - QA 在自己环境通读 `02-test-cases.md`，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
-- 该状态**不进核心门禁**：`review_plan` → `split_tasks` → `implement_code` 都不会等待它。
+- 该状态**不进核心门禁**：计划确认后进入 `split_tasks` → `implement_code` 都不会等待 QA 把用例改成 `approved`。用例正文本身要先写好，计划会话才会结束。
 - `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。
 - 建议节奏：QA 在 `implement_code` 期间完成用例 review，确保 `verify_tests` 跑的是已确认的用例。
 
@@ -154,8 +153,8 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 | 已有关键产出（示意） | 通常从哪继续 |
 |----------------------|--------------|
 | 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
-| `01-requirements` 已完成，计划/用例未齐 | 并行生成或 `review_plan` |
-| `02-plan-review` 已批 | `split_tasks` |
+| `01-requirements` 已完成，计划未确认或用例未写好 | `plan_session` |
+| `02-plan.md` 已确认且用例正文已在 | `split_tasks` |
 | `03-tasks` 已批 | `implement_code` |
 | `04-implementation` 已有 | `verify_tests` |
 | `05-test-report` 已有 | `ai_review` |
@@ -212,7 +211,7 @@ nodes:
 - Skills：Colla 需求先按项目 `fetch-colla-prd` 的读法拉取
 ```
 
-常用节点 ID：`analyze_requirements` / `create_plan` / `design_test_cases` / `review_plan` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
+常用节点 ID：`analyze_requirements` / `plan_session` / `design_test_cases` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
 
 ### 提交与后续 Action List
 
@@ -245,7 +244,7 @@ nodes:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8   # 本节点阈值（0-1）；未配置回退默认 0.8
-  create_plan:
+  plan_session:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8
@@ -253,10 +252,6 @@ nodes:
     tool: claude_code
     model: ""
     recommendation_threshold: 0.8
-  review_plan:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.9   # 例：计划评审更严格，更多项需用户确认
   split_tasks:
     tool: claude_code
     model: ""
@@ -291,7 +286,7 @@ nodes:
 
 ## 6. `suggestion_confidence` 把握规则
 
-交互/并行节点（`analyze_requirements` / `create_plan` / `review_plan` / `split_tasks`）在 `clarification_checklist` 里为每条 `suggestion` 评估 `suggestion_confidence`（0-1 浮点）。该值与 `recommendation_threshold` 配合：`>= 阈值` 自动采纳、`< 阈值` 才问用户。
+交互节点（`analyze_requirements` / `plan_session` / `split_tasks`）在 `clarification_checklist` 里为每条 `suggestion` 评估 `suggestion_confidence`（0-1 浮点）。该值与 `recommendation_threshold` 配合：`>= 阈值` 自动采纳、`< 阈值` 才问用户。
 
 引擎内置通用把握规则基线 `config/suggestion-confidence-rules.yaml`，业务可在 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml` **叠加**项目专属规则（init 生成，re-init 不覆盖）。
 

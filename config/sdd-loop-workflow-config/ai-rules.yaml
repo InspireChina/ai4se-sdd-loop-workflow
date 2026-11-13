@@ -14,8 +14,8 @@
 #    prompt 的 {{ai_rules}}，优先级高于引擎通用提示词。
 #
 # ---------- 节点与提交 ----------
-# 常用节点 ID：analyze_requirements / create_plan / design_test_cases /
-#   review_plan / split_tasks / implement_code / verify_tests /
+# 常用节点 ID：analyze_requirements / plan_session / design_test_cases /
+#   split_tasks / implement_code / verify_tests /
 #   ai_review / commit_code
 # commit_code：不配 = 人工询问是否提交、--auto 跳过；配上并在 md 写明策略则按 md 执行。
 # 引擎硬约束：禁止提交 docs_dir（与是否配置 commit_code 无关）。
@@ -26,11 +26,9 @@ ai_rules_dir: ai-rules
 nodes:
   analyze_requirements:
     - project-standards.md
-  create_plan:
+  plan_session:
     - project-standards.md
   design_test_cases:
-    - project-standards.md
-  review_plan:
     - project-standards.md
   split_tasks:
     - project-standards.md

@@ -28,21 +28,6 @@ nodes:
       - state: requirement
       - doc: 01-requirements.md
 
-  create_plan:
-    name: 制定计划
-    tool: claude_code
-    mode: headless
-    prompt: prompts/02_create_plan.md
-    prompt_auto: prompts/02_create_plan.auto.md
-    output: 02-plan.md
-    inputs:
-      - doc: 01-requirements.md
-      - state: requirement_type
-      - state: requirement_summary
-      - state: change_scope
-      - state: affected_modules
-      - state: compatibility_risk
-
   design_test_cases:
     name: 设计测试用例
     tool: claude_code
@@ -57,17 +42,18 @@ nodes:
       - state: change_scope
       - state: affected_modules
 
-  review_plan:
-    name: 计划评审
+  # 一次交互会话：只写 02-plan.md，并在同一份里完成澄清和确认。
+  # 用例由主会话按工具拉起后台 subagent 写。design_test_cases 只提供用例 prompt，不单独跑。
+  plan_session:
+    name: 计划与澄清
     tool: claude_code
     mode: interactive
-    prompt: prompts/02_review_plan.md
-    prompt_auto: prompts/02_review_plan.auto.md
-    output: 02-plan-review.md
+    prompt: prompts/02_plan_session.md
+    prompt_auto: prompts/02_plan_session.auto.md
+    output: 02-plan.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-plan-review.md
       - state: requirement_type
       - state: requirement_summary
       - state: change_scope
@@ -84,7 +70,6 @@ nodes:
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-plan-review.md
       - doc: 03-tasks.md
       - state: requirement_type
       - state: change_scope

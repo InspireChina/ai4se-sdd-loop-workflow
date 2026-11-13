@@ -25,6 +25,15 @@ class Approval:
         return {state_key: self.is_approved}
 
 
+def read_approval_status(content: str, block_name: str) -> str | None:
+    """返回确认块里的 status。块不存在时返回 None，不把缺块当成 pending。"""
+    raw = _extract_yaml_block(content, block_name)
+    if not raw:
+        return None
+    status = str(raw.get("status", "")).strip().lower()
+    return status or None
+
+
 def parse_approval(content: str, block_name: str) -> Approval:
     raw = _extract_yaml_block(content, block_name)
     if not raw:
@@ -51,10 +60,6 @@ def parse_plan_approval(content: str) -> Approval:
 
 def parse_test_cases_approval(content: str) -> Approval:
     return parse_approval(content, "test_cases_approval")
-
-
-def parse_review_plan_approval(content: str) -> Approval:
-    return parse_approval(content, "review_plan_approval")
 
 
 def parse_tasks_approval(content: str) -> Approval:
