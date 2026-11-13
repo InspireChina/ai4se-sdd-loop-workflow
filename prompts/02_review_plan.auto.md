@@ -4,6 +4,8 @@
 你是一名技术架构 review 负责人。请在同一次 CLI 会话中完成：
 **消解 plan 遗留 pending → plan review → 自决 review 缺口 → 同步修订 → 自动定稿审批**。
 
+整个流程只维护**一个文件** `{{final_output_path}}`：review 待澄清清单、review 定稿正文都在这一个文件里，靠顶部 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
+
 > **Review 的职责边界**
 > - ✅ 消化 plan 中的 pending，再做可行性/范围/契约对齐
 > - ❌ 不 review 测试用例、不做 plan ↔ test-cases 比对（用例 review 归 QA 异步处理）
@@ -44,20 +46,15 @@
 
 ## 已有 review 产出（续跑时非空）
 
-### 初稿 `draft/02-plan-review.draft.md`
-
-{{doc_02-plan-review.draft.md}}
-
-### 定稿 `02-plan-review.md`
+### `{{final_output_path}}`（review 待澄清清单与定稿正文都在此文件）
 
 {{doc_02-plan-review.md}}
 
 ## 产出路径
 
-| 阶段 | 路径 |
+| 路径 | 用途 |
 |------|------|
-| review 初稿 | `{{draft_output_path}}` |
-| review 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | review 待澄清清单、定稿正文、确认状态全部在此文件，原地更新推进 |
 | **同步更新** | `02-plan.md` |
 
 ## 四阶段任务
@@ -72,13 +69,13 @@
 
 ### 阶段 1：plan review 初稿
 
-按架构与模块、接口/API 范围、数据模型与存储、里程碑与实施顺序、技术选型与仓库一致性、风险与待决策项，逐项 review `02-plan.md`。在 draft 写入 review 缺口清单（每条带 `suggestion` 并配 `suggestion_reason` 写明推荐依据；用自然语言完整描述，禁止 `d2`/`m0` 等代号指代模块/规则/配置，须写全名 + 一句话说明）。
+按架构与模块、接口/API 范围、数据模型与存储、里程碑与实施顺序、技术选型与仓库一致性、风险与待决策项，逐项 review `02-plan.md`。在 `{{final_output_path}}` 写入 review 缺口清单（`review_plan_approval.status` 写 `pending`；每条带 `suggestion` 并配 `suggestion_reason` 写明推荐依据；用自然语言完整描述，禁止 `d2`/`m0` 等代号指代模块/规则/配置，须写全名 + 一句话说明）。
 
 **禁止**将实现细节类问题列入 review 清单（除非需求明文规定）。
 
 ### 阶段 2：自决 review 缺口（禁止提问）
 
-对 draft 每条 pending 按同一优先级裁决，写回 `resolved` + `answer`，不得残留 pending。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。`suggestion_confidence` 仅作可追溯标记。全部 resolved 后进入阶段 3。
+对清单每条 pending 按同一优先级裁决，写回 `resolved` + `answer`，不得残留 pending。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。`suggestion_confidence` 仅作可追溯标记。全部 resolved 后进入阶段 3。
 
 ### 阶段 3：同步修订 plan
 
@@ -94,7 +91,7 @@ user_note: "无人值守自动确认"
 
 ### 阶段 4：review 定稿与自动确认
 
-1. 输出 `02-plan-review.md`（review 结论、已裁决项、修订说明）
+1. 输出 `02-plan-review.md` 定稿正文（review 结论、已裁决项、修订说明），覆盖初稿，保留顶部 YAML
 2. **直接**：
 
 ```yaml review_plan_approval

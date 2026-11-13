@@ -11,13 +11,10 @@ from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
 from .state import DevWorkflowState
 
-DRAFT_DIR = "draft"
-
 
 @dataclass(frozen=True)
 class PhaseConfig:
     node_id: str
-    draft_file: str
     final_file: str
     approval_block: str
     approval_state_key: str
@@ -28,39 +25,13 @@ class PhaseConfig:
     allow_unresolved_checklist: bool = False
 
 
-def draft_dir(docs_dir: Path) -> Path:
-    return docs_dir / DRAFT_DIR
-
-
-def draft_path(docs_dir: Path, draft_filename: str) -> Path:
-    return docs_dir / DRAFT_DIR / draft_filename
-
-
-def resolve_draft_path(docs_dir: Path, draft_filename: str) -> Path:
-    """draft 目录下的路径；若仅有旧版平铺初稿则回退读取。"""
-    new = draft_path(docs_dir, draft_filename)
-    legacy = docs_dir / draft_filename
-    if legacy.exists() and not new.exists():
-        return legacy
-    return new
-
-
 def resolve_doc_path(docs_dir: Path, doc_key: str) -> Path:
-    if ".draft." in doc_key:
-        return resolve_draft_path(docs_dir, doc_key)
     return docs_dir / doc_key
-
-
-def ensure_draft_dir(docs_dir: Path) -> Path:
-    path = draft_dir(docs_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 PHASE_CONFIGS: dict[str, PhaseConfig] = {
     "analyze_requirements": PhaseConfig(
         node_id="analyze_requirements",
-        draft_file="01-requirements.draft.md",
         final_file="01-requirements.md",
         approval_block="requirement_approval",
         approval_state_key="requirement_approved",
@@ -69,7 +40,6 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
     ),
     "create_plan": PhaseConfig(
         node_id="create_plan",
-        draft_file="02-plan.draft.md",
         final_file="02-plan.md",
         approval_block="plan_approval",
         approval_state_key="plan_approved",
@@ -80,7 +50,6 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
     ),
     "design_test_cases": PhaseConfig(
         node_id="design_test_cases",
-        draft_file="02-test-cases.draft.md",
         final_file="02-test-cases.md",
         approval_block="test_cases_approval",
         approval_state_key="test_cases_approved",
@@ -91,7 +60,6 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
     ),
     "review_plan": PhaseConfig(
         node_id="review_plan",
-        draft_file="02-plan-review.draft.md",
         final_file="02-plan-review.md",
         approval_block="review_plan_approval",
         approval_state_key="review_plan_approved",
@@ -100,7 +68,6 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
     ),
     "split_tasks": PhaseConfig(
         node_id="split_tasks",
-        draft_file="03-tasks.draft.md",
         final_file="03-tasks.md",
         approval_block="tasks_approval",
         approval_state_key="tasks_approved",

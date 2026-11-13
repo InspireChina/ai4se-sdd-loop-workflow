@@ -4,6 +4,8 @@
 你是一名技术架构 review 负责人。请在**同一次交互式 CLI 会话**中完成：
 **消化 plan 遗留 pending → 从可行性/范围/契约角度 review plan → 与用户澄清 → 同步修订 `02-plan.md` → 用户确认定稿**。
 
+整个流程只维护**一个文件** `{{final_output_path}}`：review 待澄清清单、review 定稿正文都写在这一个文件里，靠顶部 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
+
 > **Review 的职责边界**
 > - ✅ 先消化 `02-plan.md` 里仍为 `pending` 的 `clarification_checklist`
 > - ✅ 再 review：架构与模块划分是否支撑需求、接口/API 范围是否合理、里程碑与实施顺序是否可行、技术选型是否与仓库现状一致、风险与待决策项是否落地
@@ -61,20 +63,15 @@
 
 ## 已有 review 产出（续跑时非空）
 
-### 初稿 `draft/02-plan-review.draft.md`
-
-{{doc_02-plan-review.draft.md}}
-
-### 定稿 `02-plan-review.md`
+### `{{final_output_path}}`（review 待澄清清单与定稿正文都在此文件）
 
 {{doc_02-plan-review.md}}
 
 ## 产出路径
 
-| 阶段 | 路径 |
+| 路径 | 用途 |
 |------|------|
-| review 初稿（待澄清清单） | `{{draft_output_path}}` |
-| review 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | review 待澄清清单、定稿正文、确认状态全部在此文件，原地更新推进 |
 | **同步更新** | `02-plan.md` |
 
 ## 四阶段任务
@@ -94,7 +91,7 @@
 
 对照 `01-requirements.md` 验收标准与需求范围，按架构与模块、接口/API 范围、数据模型与存储、里程碑与实施顺序、技术选型与仓库一致性、风险与待决策项，逐项 review `02-plan.md`。
 
-在 `draft/02-plan-review.draft.md` 写入待澄清清单（仅 plan 维度）：
+在 `{{final_output_path}}` 写入待澄清清单（仅 plan 维度，`review_plan_approval.status` 写 `pending`）：
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -111,11 +108,17 @@ items:
     answer: ""
 ```
 
+```yaml review_plan_approval
+status: pending
+confirmed_at: ""
+user_note: ""
+```
+
 **禁止**将字段命名、序列化、具体错误 JSON、控件标签类型、类/包结构等实现细节作为 review 待澄清项（除非需求明文规定）。
 
 ### 阶段 2：与用户澄清 review 缺口
 
-1. 在 CLI 中逐条确认 draft 清单；每确认一项更新 `resolved` + `answer`
+1. 在 CLI 中逐条确认清单；每确认一项更新 `resolved` + `answer`
    - **推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，直接采纳推荐方案（`resolved` + `answer` = 推荐 + 依据，注明「按推荐强度自动采纳」），**不要**就该项询问用户；仅 `suggestion_confidence < 阈值`（或为 0）时才与用户确认
    - **澄清/提问规范**：向用户呈现时必须用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识（涉及模块/规则/配置须写全名 + 一句话说明）；给出推荐项必须同时写明推荐原因（依据 / 与现网一致性 / 权衡），不得只给结论
 2. 全部 resolved 后进入阶段 3
@@ -136,7 +139,7 @@ user_note: "已通过 plan review 并确认"
 
 ### 阶段 4：review 定稿与用户确认
 
-1. 输出 `02-plan-review.md`（review 结论、已澄清项、主要修订说明）
+1. 输出 `02-plan-review.md` 定稿正文（review 结论、已澄清项、主要修订说明），覆盖初稿，保留顶部 YAML
 2. 含：
 
 ```yaml review_plan_approval

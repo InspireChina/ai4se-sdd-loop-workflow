@@ -22,7 +22,6 @@ from .phase_gate import (
     plan_and_tests_content_ready,
     requirements_complete,
     requirements_content_ready,
-    resolve_draft_path,
     review_plan_complete,
 )
 
@@ -39,7 +38,6 @@ RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
     ("02-test-cases.md", "review_plan"),
     ("02-plan.md", "parallel_plan_and_tests"),
     ("01-requirements.md", "parallel_plan_and_tests"),
-    ("draft/01-requirements.draft.md", None),
 ]
 
 ROUTABLE_NODES = frozenset(
@@ -144,14 +142,11 @@ def restore_state_from_docs(
     """从 md 恢复澄清清单、元数据、确认状态等 state 字段。"""
     restored: dict = {}
 
-    draft = resolve_draft_path(docs_dir, "01-requirements.draft.md")
-    if draft.exists():
-        checklist = parse_clarification_checklist(draft.read_text(encoding="utf-8"))
-        restored.update(checklist.to_state())
-
     final = docs_dir / "01-requirements.md"
     if final.exists():
         final_content = final.read_text(encoding="utf-8")
+        checklist = parse_clarification_checklist(final_content)
+        restored.update(checklist.to_state())
         restored.update(parse_requirement_metadata(final_content).to_state_updates())
         restored.update(parse_requirement_approval(final_content).to_state())
         if not restored.get("clarification_questions"):
@@ -307,7 +302,7 @@ def _infer_from_status_fields(
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     skip = skip_clarification or auto
 
-    if filename.endswith("01-requirements.draft.md") or filename == "01-requirements.md":
+    if filename == "01-requirements.md":
         if status.pending_count > 0 and not skip:
             return "analyze_requirements"
         if requirements_complete(docs_dir, state):
@@ -342,9 +337,6 @@ def _infer_without_status(
     pending = len(checklist.pending_items())
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
     skip = skip_clarification or auto
-
-    if filename.endswith("01-requirements.draft.md"):
-        return "analyze_requirements"
 
     if filename == "01-requirements.md":
         if pending > 0 and not skip:

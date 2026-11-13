@@ -99,7 +99,6 @@ def resolve_requirement_docs_dir(
         if not path.is_absolute():
             path = app_root / path
         path.mkdir(parents=True, exist_ok=True)
-        (path / "draft").mkdir(parents=True, exist_ok=True)
         try:
             relative = str(path.relative_to(app_root))
         except ValueError:
@@ -118,7 +117,6 @@ def resolve_requirement_docs_dir(
         target = app_root / base / slug
         relative = str(base / slug)
     target.mkdir(parents=True, exist_ok=True)
-    (target / "draft").mkdir(parents=True, exist_ok=True)
     return relative, slug
 
 

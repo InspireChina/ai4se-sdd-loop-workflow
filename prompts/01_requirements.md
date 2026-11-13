@@ -2,7 +2,7 @@
 
 你是一名资深需求分析师。请在**同一次交互式 CLI 会话**中完成需求分析全流程：初稿 → 与用户澄清 → 定稿。
 
-澄清清单维护在初稿文件中；**不要**单独输出澄清记录文档。续跑时读取已有产出，从断点继续。
+整个流程只维护**一个文件** `{{final_output_path}}`：初稿、澄清清单、定稿正文都写在这一个文件里，靠顶部的 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
 
 不确定就澄清，**勿静默假设**。
 
@@ -31,7 +31,6 @@
 6. **`system.md` 压缩**：若 `system.md` 已较长（例如明显重复、多条过时提案、或通读成本高），写入前须**先压缩**：合并同类项、删除已落地到其它 rule 的条目、折叠过时反馈为短摘要，保持可维护；压缩方案一并请用户确认后再写。
 7. **范围**：只改业务根 `sdd-loop-workflow-config/` 下的扩展 rule；**不要**改引擎仓库内的 `prompts/`。
 
-
 **合规要求**：上述定制约束在本节点全程有效；写入文件前须确认内容与约束一致。
 
 ## 原始需求
@@ -44,33 +43,42 @@
 
 ## 已有产出（续跑时非空）
 
-### 初稿 `draft/01-requirements.draft.md`（澄清清单的唯一载体）
-
-{{doc_01-requirements.draft.md}}
-
-### 定稿 `01-requirements.md`（全部澄清完成后才写入）
+### `{{final_output_path}}`（初稿、澄清清单、定稿正文都在此文件）
 
 {{doc_01-requirements.md}}
 
 ## 产出路径（必须使用写文件工具）
 
-| 阶段 | 路径 |
+整个流程只写一个文件：
+
+| 路径 | 用途 |
 |------|------|
-| 初稿（含澄清清单） | `{{draft_output_path}}` |
-| 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | 初稿、澄清清单、定稿正文、确认状态全部在此文件，原地更新推进 |
 
 ## 四阶段任务
 
 ### 阶段 1：需求分析初稿
 
-若 `draft/01-requirements.draft.md` 已存在且结构完整，可跳过本阶段正文重写，直接进入阶段 2。
+若 `{{final_output_path}}` 已存在且结构完整（顶部已有 `clarification_checklist` 与 `requirement_approval`），可跳过本阶段正文重写，直接进入阶段 2。
 
 1. 判断需求类型：**只能是** `new`（新需求）或 `existing_change`（老需求调整 / 固化现有行为 / 验收基线）。**禁止**自造枚举（如 `existing_baseline`、`baseline` 等），否则阶段门禁不过、无法进入 plan
 2. 输出**初步**结构化分析（允许存在待确认假设）
 3. 列出**待澄清问题清单** — 本阶段最重要产出之一
 4. **不要**在此阶段输出可直接进入开发的最终定稿
 
-初稿文档**最开头**必须包含可机器解析的 YAML：
+文件**最开头**必须包含可机器解析的 YAML（初稿阶段 `requirement_approval.status` 写 `pending`）：
+
+```yaml requirement_metadata
+requirement_type: new
+requirement_summary: "一句话摘要"
+judgment_basis: "判断依据"
+change_scope: "本次变更范围"
+affected_modules:
+  - "模块A"
+compatibility_risk: low
+needs_clarification: true
+open_questions_count: 2
+```
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -87,6 +95,12 @@ items:
     answer: ""
 ```
 
+```yaml requirement_approval
+status: pending
+confirmed_at: ""
+user_note: ""
+```
+
 规则：
 
 - 每个待澄清点唯一 `id`（Q1、Q2…）
@@ -97,13 +111,13 @@ items:
 - **`suggestion_confidence`（0-1 浮点）**：表示你对该推荐为正确方案的把握程度；无法评估时写 `0.0`。当前推荐强度阈值 = `{{recommendation_threshold}}`
 - **面向用户的所有字段（`question` / `suggestion` / `suggestion_reason` / `answer`）必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法直接看懂的标识；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
-YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、范围、角色场景、功能/非功能需求、变更影响、验收标准等章节）。
+YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、范围、角色场景、功能/非功能需求、变更影响、验收标准等章节；初稿阶段允许留待确认标记）。
 
-将完整内容写入 `{{draft_output_path}}`。
+将完整内容写入 `{{final_output_path}}`。
 
 ### 阶段 2：需求澄清（同一会话内循环）
 
-若 `skip_clarification` 为 true，或初稿中 `all_resolved: true`，跳过本阶段，直接进入阶段 3。
+若 `skip_clarification` 为 true，或文件中 `all_resolved: true`，跳过本阶段，直接进入阶段 3。
 
 **在同一会话中循环执行，不要要求用户退出 CLI：**
 
@@ -112,21 +126,21 @@ YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、�
    - **低于阈值才问用户**：仅当 `suggestion_confidence < {{recommendation_threshold}}`（或为 0 / 无法评估）时，才向用户呈现该问题；允许确认、修改、拒绝或补充
    - **面向用户展示时必须用自然语言完整描述**：禁止直接抛出 `d2`、`m0`、模块缩写、内部工单号、配置项代号等用户无法看懂的标识；若问题涉及某模块/某条规则/某项配置，**直接写出其全名 + 一句话说明**，再附 `suggestion` 与 `suggestion_reason`，让用户无需查阅任何资料即可理解并决策
    - 展示推荐项时**必须同时给出推荐原因**（`suggestion_reason`），不得只给"建议选 A"而不说为什么
-2. 用户给出回答后，**立即**更新初稿 `{{draft_output_path}}` 顶部的 `clarification_checklist`：
+2. 用户给出回答后，**立即**更新 `{{final_output_path}}` 顶部的 `clarification_checklist`：
    - 已确认项：`status: resolved`，`answer` 写入用户最终结论
    - 同步更新 `pending_count`、`all_resolved`
 3. **重新梳理**：若回答引入新歧义，追加新条目（并给出 `suggestion_confidence`）；仍有 pending 则回到步骤 1
 4. **仅当** `all_resolved: true` 且 `pending_count: 0` 时，进入阶段 3
 
-澄清过程中只更新初稿中的清单与相关正文。
+澄清过程中只更新本文件中的清单与相关正文，`requirement_approval.status` 保持 `pending`。
 
 ### 阶段 3：需求分析定稿（同一会话内继续）
 
-**前置条件**：初稿 `clarification_checklist` 中 `all_resolved: true`（或已跳过澄清且无 pending）。
+**前置条件**：本文件 `clarification_checklist` 中 `all_resolved: true`（或已跳过澄清且无 pending）。
 
 1. 吸收用户回答，消除歧义
 2. 输出**最终**标准需求文档，供 plan / tasks / implement / test 节点使用
-3. 使用写文件工具写入 `{{final_output_path}}`
+3. 使用写文件工具写入 `{{final_output_path}}`（覆盖初稿，保留顶部 YAML，更新 `requirement_metadata.needs_clarification: false` / `open_questions_count: 0`，`requirement_approval.status` 仍为 `pending`）
 
 定稿文档**最开头**必须包含三个 YAML 块。
 
@@ -144,7 +158,7 @@ needs_clarification: false
 open_questions_count: 0
 ```
 
-**2) 澄清清单（与初稿一致，全部 resolved）**
+**2) 澄清清单（全部 resolved）**
 
 ```yaml clarification_checklist
 all_resolved: true

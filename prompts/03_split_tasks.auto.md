@@ -3,6 +3,8 @@
 
 你是一名项目经理。请在同一次 CLI 会话中完成：初稿 → 自决决策 → 定稿（含自动审批）。
 
+整个流程只维护**一个文件** `{{final_output_path}}`：决策清单、任务定稿正文都在这一个文件里，靠顶部 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
+
 ## 工作方式（**必须遵守**）
 
 ### 1. 先思考，自行裁决
@@ -56,26 +58,21 @@
 
 ## 已有产出（续跑时非空）
 
-### 初稿 `draft/03-tasks.draft.md`
-
-{{doc_03-tasks.draft.md}}
-
-### 定稿 `03-tasks.md`
+### `{{final_output_path}}`（决策清单与任务定稿正文都在此文件）
 
 {{doc_03-tasks.md}}
 
 ## 产出路径
 
-| 阶段 | 路径 |
+| 路径 | 用途 |
 |------|------|
-| 初稿 | `{{draft_output_path}}` |
-| 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | 决策清单、任务定稿正文、确认状态全部在此文件，原地更新推进 |
 
 ## 四阶段任务
 
 ### 阶段 1：任务初稿
 
-识别不确定点，输出初步清单与决策清单（可先 pending）。写入 `{{draft_output_path}}`。
+识别不确定点，输出初步清单与决策清单（可先 pending，`tasks_approval.status` 写 `pending`）。写入 `{{final_output_path}}`。
 
 ### 阶段 2：自决决策（禁止提问）
 
@@ -85,7 +82,7 @@
 
 ### 阶段 3：任务定稿
 
-写入 `{{final_output_path}}`，含全部 resolved checklist，以及：
+覆盖初稿写入 `{{final_output_path}}`，含全部 resolved checklist，以及：
 
 ```yaml tasks_approval
 status: approved

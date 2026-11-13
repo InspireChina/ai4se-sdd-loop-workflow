@@ -1,7 +1,6 @@
 """LangGraph workflow 编排 — 节点与边在代码中固定定义。"""
 
 import logging
-import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -9,13 +8,10 @@ from langgraph.graph import END, StateGraph
 
 from .config_loader import load_workflow_config
 from .nodes.node_runner import NodeRunner
-from .parsers.clarification_parser import parse_clarification_checklist
-from .parsers.requirement_parser import parse_requirement_metadata
 from .phase_gate import (
     plan_and_tests_content_ready,
     phase_complete,
     requirements_complete,
-    resolve_draft_path,
     review_plan_complete,
 )
 from .requirement_dir import (
@@ -46,50 +42,7 @@ class DevWorkflow:
         return {"current_node": "route_next"}
 
     def analyze_requirements(self, state: DevWorkflowState) -> DevWorkflowState:
-        docs_dir = self._resolve_docs_path(state)
-        if state.get("skip_clarification"):
-            promoted = self._try_promote_draft_without_clarification(state, docs_dir)
-            if promoted is not None:
-                return promoted
         return self.node_runner.run_node("analyze_requirements", state)
-
-    def _try_promote_draft_without_clarification(
-        self, state: DevWorkflowState, docs_dir: Path
-    ) -> DevWorkflowState | None:
-        draft_path_resolved = resolve_draft_path(docs_dir, "01-requirements.draft.md")
-        final_path = docs_dir / "01-requirements.md"
-        if not draft_path_resolved.exists() or final_path.exists():
-            return None
-
-        checklist = parse_clarification_checklist(
-            draft_path_resolved.read_text(encoding="utf-8")
-        )
-        if checklist.pending_items():
-            return None
-
-        shutil.copyfile(draft_path_resolved, final_path)
-        metadata = parse_requirement_metadata(final_path.read_text(encoding="utf-8"))
-        if not metadata.requirement_type or metadata.requirement_type == "unknown":
-            metadata = parse_requirement_metadata(
-                draft_path_resolved.read_text(encoding="utf-8")
-            )
-
-        logger.info("跳过澄清且无 pending，已将初稿提升为定稿: %s", final_path)
-        app_root = self._resolve_app_root(state)
-        updates: DevWorkflowState = {
-            "node_outputs": {
-                "analyze_requirements": str(final_path.relative_to(app_root)),
-            },
-            "clarification_resolved": True,
-            "clarification_pending_count": 0,
-        }
-        updates.update(metadata.to_state_updates())
-        updates.update(checklist.to_state())
-        merged = {**state, **updates}
-        self.node_runner.write_workflow_status_for_file(
-            docs_dir, "01-requirements.md", "analyze_requirements", merged
-        )
-        return updates
 
     def parallel_plan_and_tests(self, state: DevWorkflowState) -> DevWorkflowState:
         """并行 headless：create_plan + design_test_cases（线程池，完成后进入 review）。"""
@@ -297,10 +250,6 @@ class DevWorkflow:
         if fresh and docs_path.exists():
             for path in docs_path.glob("*.md"):
                 if path.name != "00-requirement.md":
-                    path.unlink()
-            draft_subdir = docs_path / "draft"
-            if draft_subdir.is_dir():
-                for path in draft_subdir.glob("*.md"):
                     path.unlink()
 
         original_path = save_original_requirement(docs_path, requirement)

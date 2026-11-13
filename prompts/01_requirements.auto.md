@@ -3,7 +3,7 @@
 
 你是一名资深需求分析师。请在同一次 CLI 会话中完成：初稿 → 自决澄清 → 定稿（含自动审批）。
 
-澄清清单维护在初稿文件中；**不要**单独输出澄清记录文档。续跑时读取已有产出，从断点继续。
+整个流程只维护**一个文件** `{{final_output_path}}`：初稿、澄清清单、定稿正文都在这一个文件里，靠顶部 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
 
 不要把需求文档写成过度设计的技术方案；范围与验收口径说清楚即可。
 
@@ -29,33 +29,42 @@
 
 ## 已有产出（续跑时非空）
 
-### 初稿 `draft/01-requirements.draft.md`（澄清清单的唯一载体）
-
-{{doc_01-requirements.draft.md}}
-
-### 定稿 `01-requirements.md`
+### `{{final_output_path}}`（初稿、澄清清单、定稿正文都在此文件）
 
 {{doc_01-requirements.md}}
 
 ## 产出路径（必须使用写文件工具）
 
-| 阶段 | 路径 |
+整个流程只写一个文件：
+
+| 路径 | 用途 |
 |------|------|
-| 初稿（含澄清清单） | `{{draft_output_path}}` |
-| 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | 初稿、澄清清单、定稿正文、确认状态全部在此文件，原地更新推进 |
 
 ## 四阶段任务
 
 ### 阶段 1：需求分析初稿
 
-若 `draft/01-requirements.draft.md` 已存在且结构完整，可跳过正文重写，直接进入阶段 2。
+若 `{{final_output_path}}` 已存在且结构完整（顶部已有 `clarification_checklist` 与 `requirement_approval`），可跳过正文重写，直接进入阶段 2。
 
 1. 判断需求类型：**只能是** `new`（新需求）或 `existing_change`（老需求调整 / 固化现有行为 / 验收基线）。**禁止**自造枚举（如 `existing_baseline`、`baseline` 等），否则阶段门禁不过、无法进入 plan
 2. 输出**初步**结构化分析
 3. 列出待澄清问题清单（可先标 `pending`，须在本节点内全部消解）
 4. **不要**在此阶段输出最终定稿
 
-初稿**最开头**必须包含：
+文件**最开头**必须包含（初稿阶段 `requirement_approval.status` 写 `pending`）：
+
+```yaml requirement_metadata
+requirement_type: new
+requirement_summary: "一句话摘要"
+judgment_basis: "判断依据"
+change_scope: "本次变更范围"
+affected_modules:
+  - "模块A"
+compatibility_risk: low
+needs_clarification: true
+open_questions_count: 2
+```
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -72,17 +81,23 @@ items:
     answer: ""
 ```
 
+```yaml requirement_approval
+status: pending
+confirmed_at: ""
+user_note: ""
+```
+
 规则：唯一 `id`；`pending_count` 等于 pending 条数；无歧义时 `items: []`、`all_resolved: true`。
 
 - **`suggestion` 必须配 `suggestion_reason`**：写明为什么推荐该选项（依据哪条规则 / 与现网现状一致性 / 权衡了什么），不得只给结论不给原因
 - **`suggestion_confidence`（0-1 浮点）**：表示推荐为正确方案的把握；无法评估写 `0.0`。无人值守模式下全部自决，此值仅作可追溯标记
 - **所有字段必须用自然语言完整描述**：禁止出现 `d2`、`m0`、模块缩写、内部工单号、配置项代号等代号；若需指代某模块/某条规则/某项配置，**直接写出其全名与一句话说明**，不要为了图方便列编号
 
-YAML 之后输出 Markdown 正文。写入 `{{draft_output_path}}`。
+YAML 之后输出 Markdown 正文。写入 `{{final_output_path}}`。
 
 ### 阶段 2：自决澄清（禁止提问）
 
-若 `skip_clarification` 为 true，或初稿已 `all_resolved: true`，跳过本阶段，进入阶段 3。
+若 `skip_clarification` 为 true，或文件已 `all_resolved: true`，跳过本阶段，进入阶段 3。
 
 对每条 `pending`：
 
@@ -91,12 +106,12 @@ YAML 之后输出 Markdown 正文。写入 `{{draft_output_path}}`。
 3. 更新 `pending_count`、`all_resolved`
 4. 若自决引入新歧义，追加条目后同样自行 resolved
 
-**仅当** `all_resolved: true` 且 `pending_count: 0` 时进入阶段 3。**禁止**把项留在 pending，也**禁止**输出「请回复 Q1=…」。
+**仅当** `all_resolved: true` 且 `pending_count: 0` 时进入阶段 3。**禁止**把项留在 pending，也**禁止**输出「请回复 Q1=…」。`requirement_approval.status` 保持 `pending`。
 
 ### 阶段 3：需求分析定稿
 
 1. 吸收已决议内容，输出最终标准需求文档
-2. 写入 `{{final_output_path}}`
+2. 写入 `{{final_output_path}}`（覆盖初稿，保留顶部 YAML，更新 `requirement_metadata.needs_clarification: false` / `open_questions_count: 0`）
 
 定稿**最开头**三个 YAML 块：
 

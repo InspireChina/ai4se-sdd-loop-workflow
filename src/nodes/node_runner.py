@@ -22,13 +22,10 @@ from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
 from ..phase_gate import (
     PHASE_CONFIGS,
-    draft_path,
-    ensure_draft_dir,
     get_phase_config,
     phase_complete,
     phase_content_ready,
     resolve_doc_path,
-    resolve_draft_path,
     review_plan_complete,
 )
 from ..state import DevWorkflowState
@@ -201,18 +198,13 @@ class NodeRunner:
     ) -> tuple[str, object]:
         cfg = get_phase_config(node_id)
         if cfg:
-            for name in (cfg.final_file, cfg.draft_file):
-                path = (
-                    resolve_draft_path(docs_dir, name)
-                    if ".draft." in name
-                    else docs_dir / name
-                )
-                if path.exists():
-                    text = path.read_text(encoding="utf-8").strip()
-                    if text:
-                        if not result.success:
-                            result.success = True
-                        return text, result
+            final = docs_dir / cfg.final_file
+            if final.exists():
+                text = final.read_text(encoding="utf-8").strip()
+                if text:
+                    if not result.success:
+                        result.success = True
+                    return text, result
 
         if output_path.exists():
             content = output_path.read_text(encoding="utf-8")
@@ -305,8 +297,6 @@ class NodeRunner:
         cfg = get_phase_config(node_id)
         if cfg:
             final_path = docs_dir / cfg.final_file
-            draft_path_resolved = resolve_draft_path(docs_dir, cfg.draft_file)
-
             if final_path.exists():
                 final_content = final_path.read_text(encoding="utf-8")
                 if node_id == "analyze_requirements":
@@ -323,14 +313,8 @@ class NodeRunner:
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
 
-            checklist_source = (
-                draft_path_resolved if draft_path_resolved.exists() else final_path
-            )
-            if checklist_source.exists():
-                checklist = parse_clarification_checklist(
-                    checklist_source.read_text(encoding="utf-8")
-                )
-                if checklist.items or checklist_source == draft_path_resolved:
+                checklist = parse_clarification_checklist(final_content)
+                if checklist.items:
                     updates.update(checklist.to_state())
 
         if node_id == "verify_tests":
@@ -371,10 +355,7 @@ class NodeRunner:
         cfg = get_phase_config(node_cfg.node_id)
         paths: list[Path] = [output_path]
         if cfg:
-            paths = [
-                docs_dir / cfg.final_file,
-                resolve_draft_path(docs_dir, cfg.draft_file),
-            ]
+            paths = [docs_dir / cfg.final_file]
 
         for path in paths:
             if not path.exists():
@@ -527,14 +508,8 @@ class NodeRunner:
 
         cfg = get_phase_config(node_cfg.node_id)
         if cfg:
-            ensure_draft_dir(docs_dir)
-            context["draft_output_path"] = str(draft_path(docs_dir, cfg.draft_file))
             context["final_output_path"] = str(docs_dir / cfg.final_file)
         else:
-            ensure_draft_dir(docs_dir)
-            context["draft_output_path"] = str(
-                draft_path(docs_dir, "01-requirements.draft.md")
-            )
             context["final_output_path"] = str(docs_dir / "01-requirements.md")
 
         for inp in node_cfg.inputs:

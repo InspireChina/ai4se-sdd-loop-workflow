@@ -26,7 +26,6 @@ nodes:
     output: 01-requirements.md
     inputs:
       - state: requirement
-      - doc: 01-requirements.draft.md
       - doc: 01-requirements.md
 
   create_plan:
@@ -68,7 +67,6 @@ nodes:
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-plan-review.draft.md
       - doc: 02-plan-review.md
       - state: requirement_type
       - state: requirement_summary
@@ -87,7 +85,6 @@ nodes:
       - doc: 01-requirements.md
       - doc: 02-plan.md
       - doc: 02-plan-review.md
-      - doc: 03-tasks.draft.md
       - doc: 03-tasks.md
       - state: requirement_type
       - state: change_scope

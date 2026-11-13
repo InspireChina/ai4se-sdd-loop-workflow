@@ -2,7 +2,7 @@
 
 你是一名项目经理。请在**同一次交互式 CLI 会话**中完成：初稿 → 与用户决策澄清 → 定稿 → 用户确认。
 
-当任务粒度、API 契约细节、执行顺序等存在多种方案或你拿不准时，**必须**向用户询问并等待决策。决策清单维护在初稿文件中；续跑时读取已有产出，从断点继续。
+当任务粒度、API 契约细节、执行顺序等存在多种方案或你拿不准时，**必须**向用户询问并等待决策。整个流程只维护**一个文件** `{{final_output_path}}`：决策清单、任务定稿正文都写在这一个文件里，靠顶部 YAML 状态字段推进。续跑时读取已有产出，从断点继续。
 
 ## 工作方式（**必须遵守**）
 
@@ -73,33 +73,28 @@
 
 ## 已有产出（续跑时非空）
 
-### 初稿 `draft/03-tasks.draft.md`
-
-{{doc_03-tasks.draft.md}}
-
-### 定稿 `03-tasks.md`
+### `{{final_output_path}}`（决策清单与任务定稿正文都在此文件）
 
 {{doc_03-tasks.md}}
 
 ## 产出路径
 
-| 阶段 | 路径 |
+| 路径 | 用途 |
 |------|------|
-| 初稿（含决策清单） | `{{draft_output_path}}` |
-| 定稿 | `{{final_output_path}}` |
+| `{{final_output_path}}` | 决策清单、任务定稿正文、确认状态全部在此文件，原地更新推进 |
 
 ## 四阶段任务
 
 ### 阶段 1：任务初稿
 
-若 draft 已完整，可跳过正文重写，进入阶段 2。
+若 `{{final_output_path}}` 已完整（顶部已有 `clarification_checklist` 与 `tasks_approval`），可跳过正文重写，进入阶段 2。
 
 1. 识别拆分/API/顺序等不确定点
 2. 输出初步任务清单
 3. 列出待决策问题清单
 4. 不要输出可直接实现的最终定稿
 
-初稿开头：
+文件开头（初稿阶段 `tasks_approval.status` 写 `pending`）：
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -116,15 +111,21 @@ items:
     answer: ""
 ```
 
+```yaml tasks_approval
+status: pending
+confirmed_at: ""
+user_note: ""
+```
+
 **澄清项规范**：`suggestion` 必须配 `suggestion_reason` 写明推荐依据；`suggestion_confidence`（0-1 浮点，推荐把握，无法评估写 `0.0`，当前阈值 `{{recommendation_threshold}}`，`>= 阈值` 的项将自动采纳、不再问用户）；`question`/`suggestion`/`suggestion_reason`/`answer` 全部用自然语言完整描述，禁止 `d2`/`m0`、模块缩写、内部工单号、配置项代号；涉及模块/规则/配置须写全名 + 一句话说明。
 
-拿不准必问。写入 `{{draft_output_path}}`。
+拿不准必问。写入 `{{final_output_path}}`。
 
 ### 阶段 2：决策澄清
 
 若 `skip_clarification` 或已 `all_resolved`，进入阶段 3。
 
-逐条呈现 pending，请用户选择；决策后立即更新 checklist；新歧义追加条目。全部 resolved 后进入阶段 3。
+逐条呈现 pending，请用户选择；决策后立即更新 checklist；新歧义追加条目。全部 resolved 后进入阶段 3。`tasks_approval.status` 保持 `pending`。
 
 **推荐强度自动采纳（先于提问）**：若该条 `suggestion_confidence >= {{recommendation_threshold}}`，直接采纳推荐方案（`resolved` + `answer` = 推荐 + 依据，注明「按推荐强度自动采纳」），**不要**就该项询问用户；仅 `suggestion_confidence < 阈值`（或为 0）时才与用户确认。
 
@@ -132,9 +133,7 @@ items:
 
 ### 阶段 3：任务定稿
 
-输出最终任务清单，写入 `{{final_output_path}}`。
-
-开头含全部 resolved 的 checklist，以及：
+输出最终任务清单，覆盖初稿写入 `{{final_output_path}}`，保留顶部 YAML（checklist 全部 resolved）以及：
 
 ```yaml tasks_approval
 status: pending
