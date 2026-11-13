@@ -113,6 +113,16 @@ your-project/
 - **定制项目行为 → 只改 `ai-rules`**（[§5](#5-核心扩展点ai-rules)），不要改引擎 `prompts/`  
 - 人工后续（SQL / 配置等）→ Action List；**禁止提交 `docs_dir`**
 
+### QA 异步 review 测试用例（不阻塞核心流）
+
+核心流程只 review **计划**（`review_plan` 节点），**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
+
+- `design_test_cases` 节点 headless 产出 `02-test-cases.md` 初稿，其顶部 `test_cases_approval.status` 保持 `pending`。
+- QA 在自己环境通读 `02-test-cases.md`，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
+- 该状态**不进核心门禁**：`review_plan` → `split_tasks` → `implement_code` 都不会等待它。
+- `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。
+- 建议节奏：QA 在 `implement_code` 期间完成用例 review，确保 `verify_tests` 跑的是已确认的用例。
+
 ---
 
 ## 4. 断点续接
