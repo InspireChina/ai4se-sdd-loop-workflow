@@ -69,7 +69,7 @@ your-project/
 | `suggestion-confidence-rules.yaml` | `suggestion_confidence` 把握规则（详见 [§6](#6-suggestion_confidence-把握规则)）：引擎通用基线 + 项目扩展叠加 |
 | `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
 
-`sddl init` 同步策略：`start-workflow` skill 与 `workflow-local.yaml` 覆盖为引擎最新模板，并写回原来的 `project_docs_dir` 和各节点 `extend_rules`。已存在的 **`suggestion-confidence-rules.yaml` 不覆盖**。若还有旧的 `ai-rules.yaml`，其中的路径会并进 `workflow-local.yaml` 后删除旧文件。随后只询问 `project_docs_dir` 地址并写入配置，不创建该目录。未输入地址时该项为空，`sddl start` 会失败。
+`sddl init` 同步策略：`start-workflow` skill 与 `workflow-local.yaml` 覆盖为引擎最新模板，并写回原来的 `project_docs_dir` 和各节点 `extend_rules`。已存在的 **`suggestion-confidence-rules.yaml` 不覆盖**。随后只询问 `project_docs_dir` 地址并写入配置，不创建该目录。未输入地址时该项为空，`sddl start` 会失败。
 
 目录约定：
 

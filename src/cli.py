@@ -18,7 +18,6 @@ import yaml
 
 SKILL_NAME = "start-workflow"
 APP_CONFIG_DIR_NAME = "sdd-loop-workflow-config"
-AI_RULES_CONFIG_FILENAME = "ai-rules.yaml"
 AI_RULES_SUBDIR = "ai-rules"
 APP_WORKFLOW_CONFIG_FILENAME = "workflow-local.yaml"
 SUGGESTION_CONFIDENCE_RULES_FILENAME = "suggestion-confidence-rules.yaml"
@@ -205,31 +204,18 @@ def _restore_node_extend_rules(text: str, node_id: str, rules: list[str]) -> str
     return text
 
 
-def _collect_extend_rules(legacy: dict, current: dict) -> dict[str, list[str]]:
-    """合并旧 ai-rules.yaml 与 workflow-local.yaml 的规则路径。
-
-    节点没写 extend_rules 时沿用旧文件。workflow-local 里的非空列表优先。
-    空列表不盖掉旧文件里已经写过的路径。
-    """
+def _collect_extend_rules(current: dict) -> dict[str, list[str]]:
+    """读出现有 workflow-local.yaml 里各节点的扩展规则路径。"""
     from .config_loader import node_extend_rules
 
     found: dict[str, list[str]] = {}
-
-    def take(source: dict, *, empty_keeps_existing: bool) -> None:
-        nodes = source.get("nodes") or {}
-        if not isinstance(nodes, dict):
-            return
-        for node_id, raw in nodes.items():
-            rules = node_extend_rules(raw)
-            if rules is None:
-                continue
-            key = str(node_id)
-            if not rules and empty_keeps_existing and key in found:
-                continue
-            found[key] = rules
-
-    take(legacy, empty_keeps_existing=False)
-    take(current, empty_keeps_existing=True)
+    nodes = current.get("nodes") or {}
+    if not isinstance(nodes, dict):
+        return found
+    for node_id, raw in nodes.items():
+        rules = node_extend_rules(raw)
+        if rules:
+            found[str(node_id)] = rules
     return found
 
 
@@ -323,12 +309,8 @@ def command_init(argv: list[str]) -> int:
     from .requirement_dir import project_docs_dir_with_legacy_project
 
     workflow_path = _workflow_local_path(app_root)
-    legacy_rules_path = app_root / APP_CONFIG_DIR_NAME / AI_RULES_CONFIG_FILENAME
     saved = _load_yaml_mapping(workflow_path)
-    saved_rules = _collect_extend_rules(
-        _load_yaml_mapping(legacy_rules_path),
-        saved,
-    )
+    saved_rules = _collect_extend_rules(saved)
     saved_docs = str(saved.get("project_docs_dir") or saved.get("team_docs_dir") or "")
     saved_project_docs_dir = project_docs_dir_with_legacy_project(
         saved_docs,
@@ -352,9 +334,6 @@ def command_init(argv: list[str]) -> int:
             text = _restore_node_extend_rules(text, node_id, rules)
         workflow_path.write_text(text, encoding="utf-8")
         print("==> 已写回各节点 extend_rules")
-    if legacy_rules_path.is_file():
-        legacy_rules_path.unlink()
-        print("==> 已合并 ai-rules.yaml 到 workflow-local.yaml，并删除旧文件")
     return 0
 
 
