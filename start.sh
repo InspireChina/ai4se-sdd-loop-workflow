@@ -22,7 +22,6 @@ usage() {
   -t, --tool TOOL     可选，覆盖全部节点 AI 工具: cursor | claude_code | codex | omp | echo
   --model MODEL       可选，覆盖全部节点模型（不支持则降级为 tool 默认）
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
-  --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
   -h, --help          显示帮助
@@ -32,7 +31,7 @@ usage() {
 示例:
   # 调试：不调真实 AI，只跑通编排
   # 产出在 <应用根>/spec/<name>/（非本仓库内；docs_dir 默认 spec）
-  ./start.sh --tool echo --skip-clarification --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
+  ./start.sh --tool echo --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
   ./start.sh --name jwt-login --file ../spec/requirements/jwt-login-requirement.md
@@ -95,7 +94,6 @@ DOCS_DIR=""
 REQ_NAME=""
 REQ_FILE=""
 REQ_TEXT=()
-SKIP_CLARIFICATION=0
 AUTO_MODE=0
 FRESH=0
 REQ_FILE=""
@@ -106,14 +104,6 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
-      ;;
-    --skip-install|--force-install|-skip-install|-force-install)
-      # 兼容旧参数：忽略；安装一律走 init_env
-      shift
-      ;;
-    --skip-clarification)
-      SKIP_CLARIFICATION=1
-      shift
       ;;
     --auto)
       AUTO_MODE=1
@@ -227,9 +217,6 @@ if [[ -n "$REQ_NAME" ]]; then
 fi
 if [[ -n "$DOCS_DIR" ]]; then
   RUN_ARGS+=(--docs-dir "$DOCS_DIR")
-fi
-if [[ "$SKIP_CLARIFICATION" -eq 1 ]]; then
-  RUN_ARGS+=(--skip-clarification)
 fi
 if [[ "$AUTO_MODE" -eq 1 ]]; then
   RUN_ARGS+=(--auto)

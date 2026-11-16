@@ -42,10 +42,6 @@
 
 {{requirement}}
 
-## 跳过澄清
-
-{{skip_clarification_hint}}
-
 ## 已有产出（续跑时非空）
 
 ### `{{final_output_path}}`（初稿、澄清清单、定稿正文都在此文件）
@@ -127,7 +123,7 @@ YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、�
 
 ### 阶段 2：需求澄清（同一会话内循环）
 
-若 `skip_clarification` 为 true，或文件中 `all_resolved: true`，跳过本阶段，直接进入阶段 3。
+若文件中 `all_resolved: true`，跳过本阶段，直接进入阶段 3。
 
 **在同一会话中循环执行，不要要求用户退出 CLI：**
 
@@ -146,7 +142,7 @@ YAML 之后输出 Markdown 正文（需求判断、背景与目标、现状、�
 
 ### 阶段 3：需求分析定稿（同一会话内继续）
 
-**前置条件**：本文件 `clarification_checklist` 中 `all_resolved: true`（或已跳过澄清且无 pending）。
+**前置条件**：本文件 `clarification_checklist` 中 `all_resolved: true`，且无 pending。
 
 1. 吸收用户回答，消除歧义
 2. 输出**最终**标准需求文档，供 plan / tasks / implement / test 节点使用

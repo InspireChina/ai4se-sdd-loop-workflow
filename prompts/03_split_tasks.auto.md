@@ -71,10 +71,6 @@
 
 {{doc_02-plan.md}}
 
-## 跳过澄清
-
-{{skip_clarification_hint}}
-
 ## 已有产出（续跑时非空）
 
 ### `{{final_output_path}}`（决策清单与任务定稿正文都在此文件）
@@ -99,7 +95,7 @@
 
 ### 阶段 2：自决决策（禁止提问）
 
-若已跳过澄清或已 resolved，进入阶段 3。
+若已全部 resolved，进入阶段 3。
 
 对每条 pending：按 `ai-rules` → 本 prompt → `suggestion` 回写 `resolved` + `answer`。新歧义同样自行 resolved。`answer` 须用自然语言完整描述并写明依据，禁止 `d2`/`m0` 等代号指代模块/规则/配置（须写全名 + 一句话说明）。`suggestion_confidence` 仅作可追溯标记，无人值守模式下全部自决。全部 resolved 后进入阶段 3。**禁止**残留 pending。
 

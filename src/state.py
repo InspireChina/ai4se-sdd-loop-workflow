@@ -42,7 +42,6 @@ class DevWorkflowState(TypedDict, total=False):
     clarification_pending_count: int
     clarification_round: int
     user_clarifications: str
-    skip_clarification: bool
     auto: bool  # --auto 无人值守：禁止向用户提问，门禁在内容就绪后自动通过
     requirement_approved: bool
     plan_approved: bool

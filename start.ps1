@@ -35,7 +35,6 @@ function Show-Usage {
         '  -t, -tool TOOL          可选: cursor | claude_code | codex | omp | echo'
         '  -model MODEL            可选，覆盖全部节点模型'
         '  -d, -docs-dir DIR       覆盖完整产出目录'
-        '  -skip-clarification     跳过需求澄清 loop'
         '  -auto                   无人值守'
         '  -fresh                  清除已有产出后重来'
         '  -h, -help               显示帮助'
@@ -43,7 +42,7 @@ function Show-Usage {
         '依赖安装请用 .\init_env.cmd，本脚本不会执行 pip install。'
         ''
         '示例:'
-        '  .\start.cmd -tool echo -skip-clarification -file ..\docs\requirements\jwt-login-requirement.md -name jwt-login'
+        '  .\start.cmd -tool echo -file ..\docs\requirements\jwt-login-requirement.md -name jwt-login'
         '  .\start.cmd -name jwt-login -file ..\docs\requirements\jwt-login-requirement.md'
         '  .\start.cmd -name jwt-login'
     ) -join [Environment]::NewLine
@@ -126,7 +125,6 @@ function Test-VenvHealthy([string]$Dir) {
 # ---------- parse args ----------
 # 同时接受 GNU 风格长选项与单减号别名；比较用单引号字面量
 # 本脚本永不 pip install；未安装时提示执行 init_env
-$SkipClarification = $false
 $AutoMode = $false
 $Fresh = $false
 $Tool = ''
@@ -137,9 +135,6 @@ $ReqFile = ''
 $ReqText = New-Object System.Collections.Generic.List[string]
 
 $optHelp = @('-h', '-help', '--help')
-# 兼容旧参数：忽略，安装一律走 init_env
-$optIgnoredInstall = @('-skip-install', '--skip-install', '-force-install', '--force-install')
-$optSkipClarification = @('-skip-clarification', '--skip-clarification')
 $optAuto = @('-auto', '--auto')
 $optFresh = @('-fresh', '--fresh')
 $optTool = @('-t', '-tool', '--tool')
@@ -156,11 +151,6 @@ while ($i -lt $tokens.Count) {
     if ($optHelp -contains $a) {
         Show-Usage
         exit 0
-    } elseif ($optIgnoredInstall -contains $a) {
-        $i++
-    } elseif ($optSkipClarification -contains $a) {
-        $SkipClarification = $true
-        $i++
     } elseif ($optAuto -contains $a) {
         $AutoMode = $true
         $i++
@@ -298,7 +288,6 @@ if ($Tool) { [void]$RunArgs.Add('--tool'); [void]$RunArgs.Add($Tool) }
 if ($Model) { [void]$RunArgs.Add('--model'); [void]$RunArgs.Add($Model) }
 if ($ReqName) { [void]$RunArgs.Add('--name'); [void]$RunArgs.Add($ReqName) }
 if ($DocsDir) { [void]$RunArgs.Add('--docs-dir'); [void]$RunArgs.Add($DocsDir) }
-if ($SkipClarification) { [void]$RunArgs.Add('--skip-clarification') }
 if ($AutoMode) { [void]$RunArgs.Add('--auto') }
 if ($Fresh) { [void]$RunArgs.Add('--fresh') }
 

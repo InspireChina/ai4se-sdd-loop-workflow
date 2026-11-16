@@ -541,7 +541,7 @@ class NodeRunner:
     ) -> WorkflowStatus:
         pending = int(state.get("clarification_pending_count") or 0)
         all_resolved = bool(state.get("clarification_resolved", pending == 0))
-        skip = bool(state.get("skip_clarification"))
+        auto_mode = bool(state.get("auto"))
 
         phase_labels = {
             "analyze_requirements": "requirements",
@@ -575,7 +575,7 @@ class NodeRunner:
         elif node_id == "commit_code":
             next_node = ""
 
-        if skip and node_id == "analyze_requirements" and phase_complete(
+        if auto_mode and node_id == "analyze_requirements" and phase_complete(
             docs_dir, "analyze_requirements", state
         ):
             next_node = "plan_session"
@@ -730,11 +730,6 @@ class NodeRunner:
             ),
             "output_commit": output_hint(
                 docs_dir, "07-commit.md", str(state.get("delivery_role") or "")
-            ),
-            "skip_clarification_hint": (
-                "是 — 跳过与用户澄清，初稿无 pending 时直接输出定稿。"
-                if state.get("skip_clarification")
-                else "否 — 初稿有待澄清/待决策项时，必须在会话中与用户确认。"
             ),
             "role_scope": format_role_scope(
                 str(state.get("delivery_role") or ""),

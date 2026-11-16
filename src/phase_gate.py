@@ -113,7 +113,7 @@ def _body_without_status(content: str) -> str:
 
 
 def _checklist_ready(content: str, state: DevWorkflowState) -> bool:
-    if state.get("skip_clarification"):
+    if state.get("auto"):
         return True
     checklist = parse_clarification_checklist(content)
     return checklist.all_resolved or not checklist.items

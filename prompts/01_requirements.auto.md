@@ -28,10 +28,6 @@
 
 {{requirement}}
 
-## 跳过澄清
-
-{{skip_clarification_hint}}
-
 ## 已有产出（续跑时非空）
 
 ### `{{final_output_path}}`（初稿、澄清清单、定稿正文都在此文件）
@@ -107,7 +103,7 @@ YAML 之后输出 Markdown 正文。写入 `{{final_output_path}}`。
 
 ### 阶段 2：自决澄清（禁止提问）
 
-若 `skip_clarification` 为 true，或文件已 `all_resolved: true`，跳过本阶段，进入阶段 3。
+若文件已 `all_resolved: true`，跳过本阶段，进入阶段 3。
 
 对每条 `pending`：
 

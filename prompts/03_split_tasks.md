@@ -86,10 +86,6 @@
 
 {{doc_02-plan.md}}
 
-## 跳过澄清
-
-{{skip_clarification_hint}}
-
 ## 已有产出（续跑时非空）
 
 ### `{{final_output_path}}`（决策清单与任务定稿正文都在此文件）
@@ -147,7 +143,7 @@ user_note: ""
 
 ### 阶段 2：决策澄清
 
-若 `skip_clarification` 或已 `all_resolved`，进入阶段 3。
+若已 `all_resolved`，进入阶段 3。
 
 逐条呈现 pending，请用户选择；决策后立即更新 checklist；新歧义追加条目。全部 resolved 后进入阶段 3。`tasks_approval.status` 保持 `pending`。
 

@@ -74,14 +74,9 @@ def main():
         ),
     )
     parser.add_argument(
-        "--skip-clarification",
-        action="store_true",
-        help="跳过需求澄清 loop（适用于 echo 调试或非交互场景）",
-    )
-    parser.add_argument(
         "--auto",
         action="store_true",
-        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁（隐含 --skip-clarification）",
+        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁",
     )
     parser.add_argument(
         "--fresh",
@@ -155,7 +150,6 @@ def main():
         docs_dir=args.docs_dir,
         name=args.name,
         source_file=source_file,
-        skip_clarification=args.skip_clarification,
         auto=args.auto,
         fresh=args.fresh,
     )
