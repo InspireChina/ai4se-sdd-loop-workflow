@@ -1,4 +1,15 @@
-docs_dir: spec
+# 团队共享目录下的某一个项目目录（相对业务根或绝对路径）。
+# 团队共享目录里可以有多个项目；这里填的是项目那一层，不是共享目录本身。
+# sddl init 只询问并写入这个地址，不创建目录。
+# 目录不存在时，sddl start 会失败。
+#
+# <团队共享目录>/
+#   <项目名>/                            # project_docs_dir
+#     origin_requirements/               原始需求
+#     spec/<需求名>/                     workflow 产出
+#     common_extend_rules/               公共扩展规则，与 repos 平级；按需读取
+#     repos/<仓库名>/extend_rules/       该仓库的扩展规则；做该仓库时再读
+project_docs_dir: ""
 
 # 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐方案，不打断用户。
 # 每个节点在下方 nodes.<id>.recommendation_threshold 单独配置；未配置时回退默认 0.8。
@@ -10,34 +21,18 @@ defaults:
 
 nodes:
   analyze_requirements:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   plan_session:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   design_test_cases:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   split_tasks:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   implement_code:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   verify_tests:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   ai_review:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8
   commit_code:
-    tool: claude_code
-    model: ""
     recommendation_threshold: 0.8

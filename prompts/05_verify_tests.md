@@ -34,7 +34,7 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml`，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
+项目约束按引用按需读取，不要把各仓库规则一次性载入上下文，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
 
 {{ai_rules}}
 
@@ -42,9 +42,9 @@
 
 当用户在本会话中**明确提出反馈/修正意见**（针对项目规范、约定、分层、复用、测试策略等；单纯「确认 / 继续 / 没问题」不算）时：
 
-1. **读配置定位**：打开业务根 `sdd-loop-workflow-config/ai-rules.yaml`，根据 `ai_rules_dir` 与 `nodes` 确定候选扩展 rule；到 `sdd-loop-workflow-config/<ai_rules_dir>/` 读取对应 `.md`（含已有 `system.md`）。
-2. **归属判断** → **先找冲突再改（禁止一味追加）** → **先确认再写入**；无法归属则写入 `system.md`（过长先压缩再确认）。
-3. **范围**：只改业务根 `sdd-loop-workflow-config/`，勿改引擎 `prompts/`。
+1. **按需读取**：只打开上面「项目定制约束」里列出的文件。计划 `plan_metadata.involved_repos` 没点名的仓库不要读。要改规则时写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
+2. **归属判断** → **先找冲突再改（禁止一味追加）** → **先确认再写入**；跨仓库写入 `common_extend_rules/`，单仓库写入 `repos/<仓库名>/extend_rules/`（过长先压缩再确认）。
+3. **范围**：公共规则只写 `project_docs_dir/common_extend_rules/`，仓库规则只写对应 `extend_rules/`。勿改引擎 `prompts/`。
 
 ## 工程结构
 

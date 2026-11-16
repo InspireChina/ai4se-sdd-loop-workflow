@@ -8,6 +8,7 @@ from pathlib import Path
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.approval_parser import (
     parse_plan_approval,
+    parse_plan_metadata,
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
@@ -133,7 +134,11 @@ def restore_state_from_docs(
 
     plan = docs_dir / "02-plan.md"
     if plan.exists():
-        restored.update(parse_plan_approval(plan.read_text(encoding="utf-8")).to_state("plan_approved"))
+        plan_text = plan.read_text(encoding="utf-8")
+        restored.update(parse_plan_approval(plan_text).to_state("plan_approved"))
+        present, repos = parse_plan_metadata(plan_text)
+        if present:
+            restored["involved_repos"] = repos
 
     tests = docs_dir / "02-test-cases.md"
     if tests.exists():

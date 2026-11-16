@@ -65,7 +65,7 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml`，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
+项目约束按引用按需读取，不要把各仓库规则一次性载入上下文，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
 
 {{ai_rules}}
 
@@ -73,16 +73,16 @@
 
 当用户在本会话中**明确提出反馈/修正意见**（针对项目规范、约定、分层、复用、测试策略等；单纯「确认 / 继续 / 没问题」不算）时：
 
-1. **读配置定位**：打开业务根 `sdd-loop-workflow-config/ai-rules.yaml`，根据 `ai_rules_dir` 与 `nodes`（本节点及已配置的文件列表）确定候选扩展 rule；到 `sdd-loop-workflow-config/<ai_rules_dir>/` 读取对应 `.md`（若已有 `system.md` 一并读）。
+1. **按需读取**：只打开上面「项目定制约束」里列出的文件。计划 `plan_metadata.involved_repos` 没点名的仓库不要读。要改规则时写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 2. **归属判断**：判断反馈应归入哪一个 rule 文件，并简要说明依据。
 3. **先找冲突，再改（禁止一味追加）**：
    - 对照用户要求与目标 rule **现有条款**，标出冲突、重复、过时或相反的表述；
    - 优先**修订/合并/删除**冲突条款，使 rule 与用户要求一致；**不要**在未消解冲突时只在文末追加新提示词；
    - 仅当确无对应条款、且与现有条文无矛盾时，才新增条目。
 4. **先确认再写入**：**禁止**在用户明确同意前改写任何 rule 文件。须向用户展示：目标文件、冲突点摘要、拟修订前后对比（或拟删除/合并说明）；确认后再落盘。
-5. **无法归属时 → `system.md`**：在 `sdd-loop-workflow-config/<ai_rules_dir>/system.md` 新建或更新条目（反馈原文、出现节点、冲突分析、拟议条款）。落盘前同样先征求确认；确认后写入，并询问是否将 `system.md` 加入 `ai-rules.yaml` 相应 `nodes` 列表。
+5. **无法归属时**：跨仓库的约定写入 `project_docs_dir/common_extend_rules/`；只属于某个仓库的约定写入 `project_docs_dir/repos/<仓库名>/extend_rules/`。落盘前先征求确认。
 6. **`system.md` 压缩**：若 `system.md` 已较长（例如明显重复、多条过时提案、或通读成本高），写入前须**先压缩**：合并同类项、删除已落地到其它 rule 的条目、折叠过时反馈为短摘要，保持可维护；压缩方案一并请用户确认后再写。
-7. **范围**：只改业务根 `sdd-loop-workflow-config/` 下的扩展 rule；**不要**改引擎仓库内的 `prompts/`。
+7. **范围**：公共规则只写 `project_docs_dir/common_extend_rules/`，仓库规则只写 `project_docs_dir/repos/<仓库名>/extend_rules/`。**不要**改引擎仓库内的 `prompts/`。
 
 
 ## 结构化摘要

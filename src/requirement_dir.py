@@ -53,6 +53,73 @@ def make_requirement_slug(
     return f"req-{stamp}-{digest}"
 
 
+ORIGIN_REQUIREMENTS_DIRNAME = "origin_requirements"
+SPEC_DIRNAME = "spec"
+
+
+def workflow_local_config_file(app_root: Path) -> Path:
+    return app_root.resolve() / "sdd-loop-workflow-config" / "workflow-local.yaml"
+
+
+def locate_project_docs_dir(app_root: Path, project_docs_dir: str | None) -> Path | None:
+    """把 project_docs_dir 解析成绝对路径。为空时返回 None，不检查目录是否存在。"""
+    raw = (project_docs_dir or "").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = app_root.resolve() / path
+    return path.resolve()
+
+
+def project_docs_dir_with_legacy_project(project_docs_dir: str, project_name: str | None) -> str:
+    """旧配置把项目目录拆在 project_name 时，拼回 project_docs_dir。"""
+    root = (project_docs_dir or "").strip()
+    name = (project_name or "").strip()
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        return root
+    if not root or Path(root).name == name:
+        return root
+    return str(Path(root) / name)
+
+
+def resolve_project_docs_dir(app_root: Path, project_docs_dir: str | None = None) -> Path:
+    """项目文档目录，即团队共同文档仓下的 ``{project_name}``。
+
+    相对路径相对业务根；绝对路径直接使用。为空或目录不存在时失败。
+    """
+    app_root = app_root.resolve()
+    config_file = workflow_local_config_file(app_root)
+    resolved = locate_project_docs_dir(app_root, project_docs_dir)
+    if resolved is None:
+        raise SystemExit(
+            f"错误: {config_file} 的 project_docs_dir 为空。"
+            "请填写团队共同文档仓下的项目目录（相对业务根或绝对路径），并确保该目录已存在。"
+        )
+    if not resolved.is_dir():
+        raise SystemExit(
+            f"错误: project_docs_dir 指向的目录不存在: {resolved}（配置于 {config_file}）"
+        )
+    return resolved
+
+
+def origin_requirements_dir(project_docs_dir: Path) -> Path:
+    return project_docs_dir / ORIGIN_REQUIREMENTS_DIRNAME
+
+
+def spec_dir(project_docs_dir: Path) -> Path:
+    return project_docs_dir / SPEC_DIRNAME
+
+
+def path_for_state(path: Path, base: Path) -> str:
+    """能落在 base 内就存相对路径，否则存绝对路径。"""
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(base.resolve()))
+    except ValueError:
+        return str(resolved)
+
+
 def resolve_app_root(workflow_root: Path, app_root: str | None = None) -> Path:
     """
     应用项目根目录（业务代码与 docs 产出所在仓库根）。
@@ -79,54 +146,47 @@ def resolve_app_root(workflow_root: Path, app_root: str | None = None) -> Path:
 
 def resolve_requirement_docs_dir(
     app_root: Path,
-    base_docs_dir: str,
     requirement: str,
     *,
     docs_dir: str | None = None,
     name: str | None = None,
     source_file: Path | None = None,
+    project_docs_dir: str | None = None,
 ) -> tuple[str, str]:
     """
     解析本次需求的产出目录。
 
-    返回 (相对 app_root 的路径, requirement_slug)。
-    默认结构: <app_root>/docs/<requirement-slug>/
+    返回 (相对 project_docs_dir 的路径, requirement_slug)。
+    默认结构: <project_docs_dir>/spec/<requirement-slug>/
+    ``docs_dir`` 仅用于本次运行覆盖完整产出目录。
     """
-    app_root = app_root.resolve()
+    base_root = resolve_project_docs_dir(app_root, project_docs_dir)
 
     if docs_dir:
-        path = Path(docs_dir)
+        path = Path(docs_dir).expanduser()
         if not path.is_absolute():
-            path = app_root / path
+            path = base_root / path
         path.mkdir(parents=True, exist_ok=True)
-        try:
-            relative = str(path.relative_to(app_root))
-        except ValueError:
-            relative = str(path)
-        slug = path.name
-        return relative, slug
+        return path_for_state(path, base_root), path.name
 
     slug = make_requirement_slug(
         requirement, name=name, source_file=source_file
     )
-    base = Path(base_docs_dir)
-    if base.is_absolute():
-        target = base / slug
-        relative = str(target)
-    else:
-        target = app_root / base / slug
-        relative = str(base / slug)
+    target = spec_dir(base_root) / slug
     target.mkdir(parents=True, exist_ok=True)
-    return relative, slug
+    return f"{SPEC_DIRNAME}/{slug}", slug
 
 
-def resolve_docs_path(app_root: Path, docs_dir: str) -> Path:
-    """将 state/config 中的 docs_dir 解析为绝对路径。"""
-    app_root = app_root.resolve()
-    path = Path(docs_dir)
+def resolve_docs_path(content_base: Path, docs_dir: str) -> Path:
+    """将 state/config 中的 docs_dir 解析为绝对路径。
+
+    ``content_base`` 是已解析的 ``project_docs_dir``。
+    """
+    content_base = content_base.resolve()
+    path = Path(docs_dir).expanduser()
     if path.is_absolute():
         return path
-    return (app_root / path).resolve()
+    return (content_base / path).resolve()
 
 
 def save_original_requirement(docs_dir: Path, requirement: str) -> Path:

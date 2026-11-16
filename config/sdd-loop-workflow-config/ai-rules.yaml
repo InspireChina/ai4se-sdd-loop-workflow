@@ -5,38 +5,26 @@
 # （由 sddl init 生成；按项目修改。已存在时 init 不会覆盖。）
 #
 # ---------- 怎么扩展 ----------
-# 1. 在 ai-rules/ 下为需要定制的节点准备 markdown（一份或多份），写清「你们项目的规范」
-#    （分层、命名、测试栈、安全基线、提交策略等）。也可先共用下面的 project-standards.md，
-#    再按节点拆成 implement_code.md、verify_tests.md 等。
-# 2. 在本文件 nodes.<节点ID> 下列出要注入的 md（相对 ai_rules_dir）。未列出的节点不注入。
-# 3. 若某节点需要用到项目已有的 MCP、IDE/Agent Rules、Skills：不要在本 yaml 另配工具表，
-#    直接在对应扩展 md 里写明「用哪个、何时用、怎么用」即可——引擎会把该 md 注入该节点
-#    prompt 的 {{ai_rules}}，优先级高于引擎通用提示词。
+# 规则正文不注入提示词。在 nodes.<节点ID> 下列出该节点要读的 md，路径相对 project_docs_dir：
+#   common_extend_rules/<文件名>.md
+#   repos/<仓库名>/extend_rules/<文件名>.md
+# 计划写入 involved_repos 之后，仓库规则还要属于这份名单才进入该节点提示词。
+# 没配在该节点上的文件不会出现。公共规则只看节点有没有配置。
+# project_docs_dir 在 workflow-local.yaml，指向团队共享目录中的项目目录。
+# 若某节点需要 MCP、IDE/Agent Rules、Skills：写在对应 md 里，不要在本 yaml 另配工具表。
 #
 # ---------- 节点与提交 ----------
 # 常用节点 ID：analyze_requirements / plan_session / design_test_cases /
 #   split_tasks / implement_code / verify_tests /
 #   ai_review / commit_code
 # commit_code：不配 = 人工询问是否提交、--auto 跳过；配上并在 md 写明策略则按 md 执行。
-# 引擎硬约束：禁止提交 docs_dir（与是否配置 commit_code 无关）。
+# 引擎硬约束：禁止把 spec 产出提交进业务仓库（与是否配置 commit_code 无关）。
 # =============================================================================
 
-ai_rules_dir: ai-rules
-
-nodes:
-  analyze_requirements:
-    - project-standards.md
-  plan_session:
-    - project-standards.md
-  design_test_cases:
-    - project-standards.md
-  split_tasks:
-    - project-standards.md
-  implement_code:
-    - project-standards.md
-  verify_tests:
-    - project-standards.md
-  ai_review:
-    - project-standards.md
-  commit_code:
-    - project-standards.md
+# 示例：
+# nodes:
+#   plan_session:
+#     - repos/<仓库名>/extend_rules/plan_guide.md
+#   split_tasks:
+#     - repos/<仓库名>/extend_rules/task_guide.md
+nodes: {}

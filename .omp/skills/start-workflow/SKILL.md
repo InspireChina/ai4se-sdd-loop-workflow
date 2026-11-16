@@ -35,7 +35,7 @@ description: >-
 
 1. MCP 与读法只以本次 skill 输入和项目已有 rule 为准（Cursor rules、`CLAUDE.md`、`AGENTS.md`、omp rules、`ai-rules` 等）。
 2. 不要猜 MCP 名，不要自编读法；没说明就问用户，不要拼命令。
-3. 读到正文后写入业务根 `<docs_dir>/requirements/<标识>.md`（`docs_dir` 默认 `spec`，以 `sdd-loop-workflow-config/workflow.yaml` 为准）。目录不存在就创建；同名覆盖。
+3. 读到正文后写入 `<project_docs_dir>/origin_requirements/<标识>.md`。`project_docs_dir` 以业务根 `sdd-loop-workflow-config/workflow-local.yaml` 为准。为空或目录不存在时不要写文件，说明配置错误后停止。`origin_requirements` 目录不存在就创建；同名覆盖。
 4. 标识优先需求编号，否则用标题（只留字母、数字、中文、`-`）。
 5. 正文为空 → 停止。写入后的绝对路径即为 `--file`。
 
@@ -45,7 +45,7 @@ description: >-
 
 ## 2. 读取业务 tool 配置
 
-打开业务根 `sdd-loop-workflow-config/workflow.yaml`，检查是否配置了 AI 工具：
+打开业务根 `sdd-loop-workflow-config/workflow-local.yaml`，检查是否配置了 AI 工具：
 
 - 存在 `defaults.tool`，或任一 `nodes.<id>.tool` → **已配置**
 - 否则 → **未配置**
@@ -106,12 +106,12 @@ sddl start --tool omp --file "/absolute/path/to/prd.md" --name login
 
 说明：
 
-- **A**：完全按业务 `workflow.yaml` 合并后的配置跑；可不改启动命令切换节点工具。
+- **A**：完全按业务 `workflow-local.yaml` 合并后的配置跑；可不改启动命令切换节点工具。
 - **B**：CLI `--tool` 会**覆盖全部节点**，忽略配置里的按节点 tool。
 
 ### 业务未配置 tool
 
-只给带 `--tool` 的命令（当前 agent = `omp`），并提示可在 `sdd-loop-workflow-config/workflow.yaml` 增加 `defaults.tool` 后改用不带 `--tool` 的启动方式。
+只给带 `--tool` 的命令（当前 agent = `omp`），并提示可在 `sdd-loop-workflow-config/workflow-local.yaml` 增加 `defaults.tool` 后改用不带 `--tool` 的启动方式。
 
 ```bash
 sddl start --tool omp --file "/absolute/path/to/prd.md" --name login

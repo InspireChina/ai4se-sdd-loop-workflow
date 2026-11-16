@@ -39,7 +39,7 @@
 
 {{ai_rules}}
 
-不要在无人值守里改 `ai-rules` 文件。规范不够用时，在计划里写明假设，不要改配置。
+不要在无人值守里改 `project_docs_dir/common_extend_rules/` 或 `repos/<仓库名>/extend_rules/`。规范不够用时，在计划里写明假设，不要改配置。
 
 ## 计划正文结构
 
@@ -148,7 +148,14 @@
 1. 按文首说明处理用例，然后继续写计划，不要空等。
 2. 写完 `02-plan.md`，歧义全部自决，清单里不留 `pending`。
 3. 对照需求做一轮可行性/范围/契约核对，把结论和已裁决项写进 `02-plan.md` 末尾的「已确认结论」。
-4. 在同一份文件里把 `plan_approval.status` 写成 `approved`，`confirmed_at` 用当前时间，`user_note` 写「无人值守按 ai-rules 定稿」。
-5. 用例文件还没写完时不要结束会话。
+4. 在同一份 `02-plan.md` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
+
+```yaml plan_metadata
+involved_repos:
+  - <仓库名>
+```
+
+5. 在同一份文件里把 `plan_approval.status` 写成 `approved`，`confirmed_at` 用当前时间，`user_note` 写「无人值守按 ai-rules 定稿」。
+6. 用例文件还没写完时不要结束会话。
 
 完整 Markdown 必须用写文件工具写入 `{{final_output_path}}`。不要写 `02-plan-review.md`。

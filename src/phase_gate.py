@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .parsers.approval_parser import parse_approval, read_approval_status
+from .parsers.approval_parser import parse_approval, parse_plan_metadata, read_approval_status
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
 from .state import DevWorkflowState
@@ -102,6 +102,14 @@ def _validate_test_cases_final(content: str, cfg: PhaseConfig) -> bool:
     return status in ("pending", "approved")
 
 
+def _validate_plan_final(content: str, cfg: PhaseConfig) -> bool:
+    """计划定稿必须带 plan_metadata，后续节点才知道读哪些仓库规则。"""
+    if not _validate_generic_final(content, cfg):
+        return False
+    present, _repos = parse_plan_metadata(content)
+    return present
+
+
 def _validate_generic_final(content: str, cfg: PhaseConfig) -> bool:
     body = _body_without_status(content)
     if len(body) < cfg.min_body_chars:
@@ -113,7 +121,7 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
     "analyze_requirements": lambda content, cfg: _validate_generic_final(content, cfg)
     and _validate_requirements_final(content),
     "design_test_cases": _validate_test_cases_final,
-    "plan_session": _validate_generic_final,
+    "plan_session": _validate_plan_final,
     "split_tasks": _validate_generic_final,
 }
 

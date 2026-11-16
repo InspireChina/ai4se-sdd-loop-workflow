@@ -58,6 +58,24 @@ def parse_plan_approval(content: str) -> Approval:
     return parse_approval(content, "plan_approval")
 
 
+def parse_plan_metadata(content: str) -> tuple[bool, list[str]]:
+    """读取计划里的涉及仓库。块不存在时第一项为 False。"""
+    raw = _extract_yaml_block(content, "plan_metadata")
+    if raw is None:
+        return False, []
+    repos = raw.get("involved_repos") or []
+    if isinstance(repos, str):
+        repos = [repos]
+    if not isinstance(repos, list):
+        return True, []
+    names: list[str] = []
+    for item in repos:
+        name = str(item).strip()
+        if name and name not in names:
+            names.append(name)
+    return True, names
+
+
 def parse_test_cases_approval(content: str) -> Approval:
     return parse_approval(content, "test_cases_approval")
 

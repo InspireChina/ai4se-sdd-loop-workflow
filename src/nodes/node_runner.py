@@ -13,11 +13,22 @@ from ..agents.subagent_delegation import (
     testcase_ready_note,
 )
 from ..config_loader import NodeConfig, NodeScoringRules, WorkflowConfig
-from ..requirement_dir import resolve_app_root, resolve_docs_path
-from ..ai_rules_loader import build_ai_rules_prompt
+from ..requirement_dir import (
+    path_for_state,
+    resolve_app_root,
+    resolve_docs_path,
+    resolve_project_docs_dir,
+)
+from ..ai_rules_loader import (
+    build_ai_rules_prompt,
+    materialize_rule_references,
+    restrict_rules_to_involved,
+    rule_catalog_mode,
+)
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_plan_approval,
+    parse_plan_metadata,
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
@@ -42,6 +53,21 @@ from ..state import DevWorkflowState
 logger = logging.getLogger(__name__)
 
 EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 把握规则；按你的整体把握给 0-1 浮点，无法评估写 0.0）"
+
+
+def _hydrate_involved_repos(
+    docs_dir: Path, state: DevWorkflowState
+) -> dict[str, list[str]]:
+    """state 里已有涉及仓库就不动。没有则从 02-plan.md 读一次，交给调用方写回 state。"""
+    if state.get("involved_repos") is not None:
+        return {}
+    plan_path = docs_dir / "02-plan.md"
+    if not plan_path.is_file():
+        return {}
+    present, repos = parse_plan_metadata(plan_path.read_text(encoding="utf-8"))
+    if not present:
+        return {}
+    return {"involved_repos": repos}
 
 
 def _format_rule_list(rules: list, label: str) -> list[str]:
@@ -101,6 +127,10 @@ class NodeRunner:
     def run_node(self, node_id: str, state: DevWorkflowState) -> DevWorkflowState:
         node_cfg = self.workflow_config.nodes[node_id]
         docs_dir = self._resolve_docs_dir(state)
+
+        hydrated = _hydrate_involved_repos(docs_dir, state)
+        if hydrated:
+            state = {**state, **hydrated}
 
         auto = bool(state.get("auto"))
         prompt_rel = node_cfg.resolve_prompt_file(auto)
@@ -193,17 +223,17 @@ class NodeRunner:
         updates: DevWorkflowState = {
             "current_node": node_id,
             "node_outputs": {
-                node_id: str(
-                    output_path.relative_to(
-                        resolve_app_root(
-                            self.project_root,
-                            state.get("app_root") or self.workflow_config.app_root,
-                        )
-                    )
+                node_id: path_for_state(
+                    output_path,
+                    resolve_app_root(
+                        self.project_root,
+                        state.get("app_root") or self.workflow_config.app_root,
+                    ),
                 )
             },
             "completed_nodes": [node_id],
         }
+        updates.update(hydrated)
         updates.update(self._parse_node_outputs(node_id, content, docs_dir))
 
         merged_state = {**state, **updates}
@@ -364,6 +394,10 @@ class NodeRunner:
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
+                if node_id == "plan_session":
+                    present, repos = parse_plan_metadata(final_content)
+                    if present:
+                        updates["involved_repos"] = repos
 
                 checklist = parse_clarification_checklist(final_content)
                 if checklist.items:
@@ -522,7 +556,10 @@ class NodeRunner:
             self.project_root,
             state.get("app_root") or self.workflow_config.app_root,
         )
-        return resolve_docs_path(app_root, docs_dir)
+        return resolve_docs_path(
+            resolve_project_docs_dir(app_root, self.workflow_config.project_docs_dir),
+            docs_dir,
+        )
 
     def _agent_cwd(self, node_id: str) -> Path:
         """实现/测试节点在应用项目根执行；其余在本仓库（编排引擎）根目录。"""
@@ -543,10 +580,7 @@ class NodeRunner:
             self.project_root,
             state.get("app_root") or self.workflow_config.app_root,
         )
-        try:
-            rel = str(output_path.relative_to(app_root))
-        except ValueError:
-            rel = str(output_path)
+        rel = path_for_state(output_path, app_root)
         updates: DevWorkflowState = {
             "current_node": node_id,
             "node_outputs": {node_id: rel},
@@ -668,11 +702,26 @@ class NodeRunner:
             )
             context.update(meta.to_context())
 
+        app_root_setting = state.get("app_root") or self.workflow_config.app_root
+        project_docs = resolve_project_docs_dir(
+            resolve_app_root(self.project_root, app_root_setting),
+            self.workflow_config.project_docs_dir,
+        )
+        involved_repos = state.get("involved_repos")
+        metadata_present = involved_repos is not None
+        references = materialize_rule_references(
+            docs_dir,
+            project_docs,
+            list(node_cfg.extend_rules),
+            involved_repos=list(involved_repos or []),
+            restrict_to_involved=restrict_rules_to_involved(
+                node_cfg.node_id, metadata_present
+            ),
+        )
         context["ai_rules"] = build_ai_rules_prompt(
-            self.project_root,
-            node_cfg.extend_rules,
-            rules_dir=self.workflow_config.ai_rules_dir,
-            app_root=state.get("app_root") or self.workflow_config.app_root,
+            references,
+            mode=rule_catalog_mode(node_cfg.node_id, metadata_present),
+            involved_repos=list(involved_repos or []),
         )
 
         context["recommendation_threshold"] = str(

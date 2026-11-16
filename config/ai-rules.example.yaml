@@ -4,6 +4,6 @@
 #   sddl init
 #
 # 将生成（模板真源：config/sdd-loop-workflow-config/）：
-#   <业务根>/sdd-loop-workflow-config/workflow.yaml
+#   <业务根>/sdd-loop-workflow-config/workflow-local.yaml
 #   <业务根>/sdd-loop-workflow-config/ai-rules.yaml
-#   <业务根>/sdd-loop-workflow-config/ai-rules/*.md
+#   规则路径写在 ai-rules.yaml，相对 project_docs_dir（团队共同文档仓/{project_name}）

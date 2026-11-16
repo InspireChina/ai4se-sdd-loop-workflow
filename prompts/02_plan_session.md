@@ -39,11 +39,11 @@
 
 ## 项目定制约束
 
-以下约束来自业务项目 `sdd-loop-workflow-config/ai-rules.yaml`，优先级高于本 prompt 其他章节。和需求或计划冲突时，在会话里提出，等用户决策。
+项目约束按引用按需读取，不要把各仓库规则一次性载入上下文，优先级高于本 prompt 其他章节。和需求或计划冲突时，在会话里提出，等用户决策。
 
 {{ai_rules}}
 
-用户在本会话明确提出项目规范、约定、分层、复用、测试策略方面的反馈时（单纯「确认 / 继续 / 没问题」不算）：先读业务根 `sdd-loop-workflow-config/ai-rules.yaml` 和对应 md，找到该改哪一条；先改冲突的旧条款，不要只在文末追加。给用户看目标文件、冲突和修改前后对比，用户同意后再写入。只改业务根 `sdd-loop-workflow-config/`，不要改引擎 `prompts/`。
+用户在本会话明确提出项目规范、约定、分层、复用、测试策略方面的反馈时（单纯「确认 / 继续 / 没问题」不算）：先确定本次要改的仓库，只打开公共规则和这些仓库的规则，找到该改哪一条；先改冲突的旧条款，不要只在文末追加。给用户看目标文件、冲突和修改前后对比，用户同意后再写入。公共规则写回 `project_docs_dir/common_extend_rules/`，仓库规则写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。不要改引擎 `prompts/`。定稿时把这些仓库写入 `plan_metadata.involved_repos`。
 
 ## 计划正文结构
 
@@ -185,7 +185,14 @@ items:
 1. 按文首说明处理用例（该起 subagent 就立刻起，然后继续往下做）。
 2. 写或续写 `02-plan.md`。版块按「本次角色」。多种方案当场问用户；问完把 `answer` 写上、`status` 改成 `resolved`，正文写成已经选定的方案。清单可以先有 pending，但本会话结束前不能再留 pending。
 3. 初稿落盘后，对照需求和仓库再核对一遍可行性、范围和契约。还有缺口就继续问，并把结论写进 `02-plan.md` 末尾的「已确认结论」一节。没有缺口就在这一节写明核对过、没有新增问题。
-4. 请用户确认计划可以定稿。用户明确同意之前，`plan_approval` 保持 `pending`。同意之后在同一份 `02-plan.md` 里写成：
+4. 在同一份 `02-plan.md` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
+
+```yaml plan_metadata
+involved_repos:
+  - <仓库名>
+```
+
+5. 请用户确认计划可以定稿。用户明确同意之前，`plan_approval` 保持 `pending`。同意之后在同一份 `02-plan.md` 里写成：
 
 ```yaml plan_approval
 status: approved

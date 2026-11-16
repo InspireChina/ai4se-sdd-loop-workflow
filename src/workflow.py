@@ -14,7 +14,9 @@ from .phase_gate import (
     requirements_complete,
 )
 from .requirement_dir import (
+    path_for_state,
     resolve_app_root,
+    resolve_project_docs_dir,
     resolve_docs_path,
     resolve_requirement_docs_dir,
     save_original_requirement,
@@ -129,9 +131,15 @@ class DevWorkflow:
             return resolve_app_root(self.project_root, state["app_root"])
         return resolve_app_root(self.project_root, self.workflow_config.app_root)
 
+    def _content_base(self, state: DevWorkflowState | None = None) -> Path:
+        return resolve_project_docs_dir(
+            self._resolve_app_root(state),
+            self.workflow_config.project_docs_dir,
+        )
+
     def _resolve_docs_path(self, state: DevWorkflowState) -> Path:
         docs_dir = state.get("docs_dir") or self.workflow_config.docs_dir
-        return resolve_docs_path(self._resolve_app_root(state), docs_dir)
+        return resolve_docs_path(self._content_base(state), docs_dir)
 
     def _build_graph(self):
         workflow = StateGraph(DevWorkflowState)
@@ -212,13 +220,13 @@ class DevWorkflow:
         app_root = self._resolve_app_root()
         resolved_docs_dir, requirement_slug = resolve_requirement_docs_dir(
             app_root,
-            self.workflow_config.docs_dir,
             requirement,
             docs_dir=docs_dir,
             name=name,
             source_file=source_file,
+            project_docs_dir=self.workflow_config.project_docs_dir,
         )
-        docs_path = resolve_docs_path(app_root, resolved_docs_dir)
+        docs_path = resolve_docs_path(self._content_base(), resolved_docs_dir)
 
         if fresh and docs_path.exists():
             for path in docs_path.glob("*.md"):
@@ -256,9 +264,7 @@ class DevWorkflow:
             "requirement_slug": requirement_slug,
             "resume_from_node": start_node,
             "node_outputs": {
-                "original_requirement": str(
-                    original_path.relative_to(app_root)
-                ),
+                "original_requirement": path_for_state(original_path, app_root),
             },
             "completed_nodes": [],
             "requirement_type": "",
@@ -269,6 +275,7 @@ class DevWorkflow:
             "delivery_role": "unknown",
             "delivery_blocks": [],
             "role_basis": "",
+            "involved_repos": None,
             "requirement_metadata": {},
             "clarification_questions": [],
             "clarification_resolved": False,

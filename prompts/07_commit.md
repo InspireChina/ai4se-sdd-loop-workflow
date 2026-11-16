@@ -9,14 +9,14 @@
 
 ## 硬性约束（引擎级，不可被扩展 rule 覆盖）
 
-1. **禁止提交 `docs_dir`**：文档产出目录为 `{{docs_dir}}`（相对业务根通常为 `spec/` 等）。不得 `git add` / commit 该目录下任何文件（含本节点产出 `07-commit.md`）。
+1. **禁止提交文档产出**：文档在团队文档仓库 `{{docs_dir}}`（`project_docs_dir/spec/<需求名>/`）。不得把该目录 `git add` / commit 进业务仓库（含本节点产出 `07-commit.md`）。
 2. 提交范围仅限业务代码与相关测试等非 docs 改动；不确定是否属于 docs 时先排除。
 3. **默认不 push**（除非扩展 rule 明确要求）。
 4. 无改动可提交时：写报告说明 nothing to commit，正常结束（勿空 commit）。
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml` 的 `nodes.commit_code`，**优先级高于本 prompt 的默认询问协议**（但不得违反上文「禁止提交 docs_dir」）。
+提交策略如有项目定制，按引用读取公共规则和本次仓库的规则，不要预读其他仓库，**优先级高于本 prompt 的默认询问协议**（但不得违反上文「禁止提交 docs_dir」）。
 
 {{ai_rules}}
 

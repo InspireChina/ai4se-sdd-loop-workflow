@@ -16,7 +16,7 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml` 的 `nodes.commit_code`。
+提交策略如有项目定制，按引用读取公共规则和本次仓库的规则，不要预读其他仓库。
 
 {{ai_rules}}
 

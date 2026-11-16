@@ -41,13 +41,13 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml`，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
+项目约束按引用按需读取，不要把各仓库规则一次性载入上下文，**优先级高于本 prompt 其他章节**。冲突时在会话中提出，待用户决策。
 
 {{ai_rules}}
 
 ### 用户反馈 → 扩展 rule 修订（**必须遵守**）
 
-当用户明确提出风格/安全/整洁度修正意见时：定位 `ai-rules` → 先找冲突再改 → 先确认再写入；无法归属写入 `system.md`。只改业务根 `sdd-loop-workflow-config/`。
+当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和 `plan_metadata.involved_repos` 点名的仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `project_docs_dir/common_extend_rules/`，单仓库写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 
 ## 工程结构
 

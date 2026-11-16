@@ -1,8 +1,8 @@
 # ai4se-sdd-loop-workflow
 
-从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review → 提交**的工程化 Workflow。配置和产出写在业务项目里；结束时汇总须人工执行的后续事项（SQL / 配置等）。
+从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review → 提交**的工程化 Workflow。配置写在业务项目里。文档放在团队共享目录的项目目录 `project_docs_dir`。一个共享目录里可以有多个项目。结束时汇总须人工执行的后续事项（SQL / 配置等）。
 
-**按项目扩展的核心入口是 `sdd-loop-workflow-config/ai-rules`**（见 [§5](#5-核心扩展点ai-rules)）：把项目规范、以及各节点要用的 MCP / Rules / Skills，写进扩展 md 并在 `ai-rules.yaml` 挂到对应节点即可，**不必改引擎 prompt**。`sddl init` 后改业务侧配置就能用。
+**按项目扩展时改 `project_docs_dir` 下的规则目录**（见 [§5](#5-核心扩展点ai-rules)）：公共规则放 `common_extend_rules/`，仓库规则放 `repos/<仓库名>/extend_rules/`。提示词只给目录引用，做到哪个仓库再读哪个仓库，**不必改引擎 prompt**。`sddl init` 只询问并写入 `project_docs_dir` 地址，不创建文档目录。`sddl start` 在 `project_docs_dir` 为空或目录不存在时失败。
 
 CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
 
@@ -29,7 +29,7 @@ Windows 默认过旧时，`init_env.cmd` 会优先 `py -3.14`…`-3.10`（跳过
 
 ```bash
 sddl init
-# 在 sdd-loop-workflow-config/workflow.yaml 配好 defaults.tool 后，可不带 --tool：
+# 在 sdd-loop-workflow-config/workflow-local.yaml 配好 defaults.tool 后，可不带 --tool：
 sddl start --file "/path/to/prd.md" --name login
 sddl start --name login --auto                    # 无人值守
 sddl start --name login                           # 续跑，勿加 --fresh
@@ -57,23 +57,33 @@ sddl start --tool claude_code --file "/path/to/prd.md" --name login
 ```text
 your-project/
 ├── sdd-loop-workflow-config/     # 业务配置（改这里）
-│   ├── workflow.yaml             # docs_dir + defaults.tool/model（覆盖引擎）
-│   ├── ai-rules.yaml             # 【核心】节点 → 扩展 md 映射
-│   ├── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
+│   ├── workflow-local.yaml       # project_docs_dir + defaults.tool/model（覆盖引擎）
+│   ├── ai-rules.yaml             # 扩展说明；规则正文不从这里注入
 │   └── suggestion-confidence-rules.yaml  # suggestion_confidence 打分规则（叠加引擎基线）
 └── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
 ```
 
 | 文件 | 作用 |
 |------|------|
-| `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + MCP/Rules/Skills 引用 |
-| `workflow.yaml` | `docs_dir`；按节点 `recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
+| `common_extend_rules/` 与 `repos/<仓库名>/extend_rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：公共规则，以及做到该仓库时再读的仓库规则 |
+| `workflow-local.yaml` | `project_docs_dir`（团队共享目录中的项目目录）；按节点 `recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
 | `suggestion-confidence-rules.yaml` | `suggestion_confidence` 把握规则（详见 [§6](#6-suggestion_confidence-把握规则)）：引擎通用基线 + 项目扩展叠加 |
 | `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
 
-`sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 与 `suggestion-confidence-rules.yaml` 保留不覆盖**（避免冲掉项目自定义）。
+`sddl init` 同步策略：`start-workflow` skill 与 `workflow-local.yaml` 覆盖为引擎最新模板；已存在的 **`ai-rules.yaml`、`suggestion-confidence-rules.yaml` 不覆盖**。随后只询问 `project_docs_dir` 地址并写入配置，不创建该目录。未输入地址时该项为空，`sddl start` 会失败。
 
-跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
+目录约定：
+
+```text
+<团队共享目录>/
+  <项目名>/                          # project_docs_dir，一个共享目录下可有多个项目
+    origin_requirements/             原始需求
+    spec/<需求名>/                   01-requirements.md … 07-commit.md
+    common_extend_rules/             公共扩展规则，与 repos 平级
+    repos/<仓库名>/extend_rules/     该仓库的扩展规则，做到这个仓库时再读
+```
+
+`sddl start` 在 `project_docs_dir` 为空或目录不存在时失败。
 
 ### `start-workflow` skill 用在什么时候
 
@@ -82,7 +92,7 @@ your-project/
 | 场景 | 你怎么说 | skill 做什么 |
 |------|----------|--------------|
 | 本地已有 PRD | 给出文件路径 | 校验路径存在，直接拼 `sddl start --file ...` |
-| 需求在外部系统（Jira、Colla 等） | 告诉**卡号 / 需求标识** | 按项目已配置的 **MCP** 拉取正文 → 写入本地（如 `docs/requirements/<标识>.md`）→ 再拼启动命令 |
+| 需求在外部系统（Jira、Colla 等） | 告诉**卡号 / 需求标识** | 按项目已配置的 **MCP** 拉取正文 → 写入 `<project_docs_dir>/origin_requirements/<标识>.md` → 再拼启动命令 |
 | 两边都没有 | — | 先问你要路径或外部来源，不瞎拼命令 |
 
 要点：
@@ -128,7 +138,7 @@ your-project/
 
 ## 4. 断点续接
 
-产出落在 `<docs_dir>/<name>/`（如 `spec/login/`）。每次启动会扫描该目录已有 md 与文末 **Workflow 状态**表，从**未完成的下一节点**接着跑，不会无故从头再来。
+产出落在 `<project_docs_dir>/spec/<name>/`。每次启动会扫描该目录已有 md 与文末 **Workflow 状态**表，从**未完成的下一节点**接着跑，不会无故从头再来。
 
 ### 怎么续
 
@@ -171,37 +181,19 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 
 ## 5. 核心扩展点：`ai-rules`
 
-业务侧目录：`sdd-loop-workflow-config/`。**按项目定制时优先只改 `ai-rules`**，不必改引擎仓库里的 `prompts/` 或节点编排。
+规则正文不写进节点 prompt。`ai-rules.yaml` 的 `nodes.<节点ID>` 列出该节点要读的 md。生成 `temp-prompts/<节点>.prompt.md` 时，只把这些文件复制到同级 `references/`：公共文件名为 `common_<文件名>.md`，仓库文件名为 `<仓库名>_<文件名>.md`。计划定稿把本次要改的仓库写入 `02-plan.md` 的 `plan_metadata.involved_repos`。计划之后的节点再滤一遍：本节点配了这条规则，并且它属于涉及的仓库，才列进提示词。**改规则时改 `project_docs_dir` 下的源文件**，不必改引擎 `prompts/`。
 
-| 改什么 | 作用 |
-|--------|------|
-| `ai-rules.yaml` | 声明「哪个节点注入哪些 md」 |
-| `ai-rules/*.md` | 写**你们项目的规范**；需要时在同一文件里引用 MCP / Rules / Skills |
+| 目录 | 作用 |
+|------|------|
+| `project_docs_dir/common_extend_rules/` | 公共规则，与 `repos/` 平级。遵守项目约束前读取 |
+| `project_docs_dir/repos/<仓库名>/extend_rules/` | 该仓库的规则。节点 yaml 配了它，且仓库在 `involved_repos` 里，后续节点才读 |
 
-正文经 `{{ai_rules}}` 注入对应节点，**优先级高于**引擎通用提示词；`--auto` 也优先按这里消解歧义。
+读到的规则**优先级高于**引擎通用提示词；`--auto` 也优先按这里消解歧义。
 
-### 怎么扩展（三步）
+### 怎么扩展
 
-1. 在 `ai-rules/` 下准备 md：可先改 init 自带的 `project-standards.md`，或按节点拆成 `implement_code.md`、`verify_tests.md` 等，写清项目约定。  
-2. 在 `ai-rules.yaml` 的 `nodes.<节点ID>` 下列出这些文件（未列出的节点不注入）。  
-3. 某节点要用项目已有的 **MCP / IDE·Agent Rules / Skills** 时：在**该节点对应的扩展 md**里写明「用哪个、何时用、怎么用」——**不要**在 yaml 里另配工具表。
-
-```yaml
-# ai-rules.yaml
-ai_rules_dir: ai-rules
-
-nodes:
-  analyze_requirements:
-    - project-standards.md
-  implement_code:
-    - project-standards.md   # 可换成 implement_code.md 等
-  verify_tests:
-    - project-standards.md
-  ai_review:
-    - project-standards.md
-  # commit_code:             # 需要定制提交策略时再打开
-  #   - project-standards.md
-```
+1. 公共约定写到 `common_extend_rules/`，只属于某个仓库的约定写到 `repos/<仓库名>/extend_rules/`。再把相对 `project_docs_dir` 的路径写进 `ai-rules.yaml` 的 `nodes.<节点ID>`。可参考引擎模板 `config/sdd-loop-workflow-config/ai-rules/project-standards.md`。  
+2. 某节点要用项目已有的 **MCP / IDE·Agent Rules / Skills** 时：写在对应 md 里——**不要**在 yaml 里另配工具表。
 
 ```markdown
 # project-standards.md（或节点专用 md）里引用工具
@@ -219,10 +211,10 @@ nodes:
 |------|------|
 | 未配 `commit_code` | 拟 msg → 问用户；拒绝则跳过；`--auto` 跳过提交 |
 | 已配并在 md 写明策略 | 按扩展 md 提交（msg / 是否 push 等） |
-| `docs_dir` | **禁止** stage/commit（含 `07-commit.md`） |
+| `spec/` | **禁止**把团队文档仓库里的产出 stage/commit 进业务仓库（含 `07-commit.md`） |
 | Action List | `04`「人工后续事项」→ `07`「后续 Action List」；须具体，无则写「无」 |
 
-### 业务 `workflow.yaml`：docs_dir + tool/model 覆盖
+### 业务 `workflow-local.yaml`：project_docs_dir + tool/model 覆盖
 
 合并优先级：**业务 `nodes.<id>` > 业务 `defaults` > 引擎节点 > 引擎 `defaults`**。只配 `defaults.tool` 时，全部节点用该 tool。`prompt` / `mode` / `inputs` 仍在引擎 `config/workflow.yaml`。
 
@@ -233,7 +225,7 @@ nodes:
 - `sddl init` 初始化时每个节点都写入 `0.8`，按需逐节点调。
 
 ```yaml
-docs_dir: spec
+project_docs_dir: ../<团队共享目录>/<项目名>
 
 defaults:
   tool: claude_code
