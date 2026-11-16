@@ -18,7 +18,6 @@ SUFFIX_ROLE = {suffix: role for role, suffix in ROLE_SUFFIX.items()}
 ROLE_SCOPED_OUTPUTS = frozenset(
     {
         "02-plan.md",
-        "02-test-cases.md",
         "03-tasks.md",
         "04-implementation.md",
         "05-test-report.md",

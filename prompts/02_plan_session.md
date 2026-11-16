@@ -28,7 +28,7 @@
 - 只做前端：`delivery_role: frontend`，`delivery_blocks` 只有 `frontend`，文件名后缀 `front`，只输出版块 B
 - 两边都做：`delivery_role: both`，`delivery_blocks` 含 `backend` 和 `frontend`，文件名后缀 `all`，版块 A、B 都输出
 
-计划文件只能是 `{{output_plan}}` 里和角色对应的那一个。只做后端写 `02-plan-backend.md`，只做前端写 `02-plan-front.md`，两边都做写 `02-plan-all.md`。不要写不带后缀的 `02-plan.md`。用例文件用同一个后缀。
+计划文件只能是 `{{output_plan}}` 里和角色对应的那一个。只做后端写 `02-plan-backend.md`，只做前端写 `02-plan-front.md`，两边都做写 `02-plan-all.md`。不要写不带后缀的 `02-plan.md`。用例不分前后端，按文首说明交给后台去写。
 
 文件最开头、任何 YAML 之前写「角色与版块」，角色、版块、依据和 `plan_metadata` 一致。向用户提第一个问题之前，先把这个角色说出来。分不清就在本会话里问完，定稿前不能留成未识别。
 

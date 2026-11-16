@@ -118,7 +118,7 @@ your-project/
 | AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
 | 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
 
-计划及之后的产出都带角色后缀：只做后端是 `-backend`，只做前端是 `-front`，两边都做是 `-all`。例如 `03-tasks-backend.md`。需求文件仍是 `01-requirements.md`。角色在计划节点确定，后面的节点沿用这份结论。
+计划及之后的产出都带角色后缀：只做后端是 `-backend`，只做前端是 `-front`，两边都做是 `-all`。例如 `03-tasks-backend.md`。需求文件仍是 `01-requirements.md`。用例报告仍是 `02-test-cases.md`，不分角色。角色在计划节点确定，后面的节点沿用这份结论。
 
 - 人工：`prompts/*.md`，澄清与审批需确认；`--auto` 用 `*.auto.md`，按 `ai-rules` 自决  
 - 测试只在「测试自验证」写；实现节点不写测试  
@@ -129,7 +129,7 @@ your-project/
 
 核心流程只在计划会话里确认 **计划**，**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
 
-- 用例写到与计划相同后缀的文件，例如 `02-test-cases-backend.md`。正文写完后，AI 才把 `test_cases_approval.status` 写成 `pending`，表示写完了、等人工澄清。没有这个确认块，计划会话不结束。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
+- 用例不分前后端。报告写到 `02-test-cases.md`，用例文件放在同目录的 `attachments/`。扩展 rule 没规定形式时写 markdown；规定了形式也放在这个目录，并在报告里写明位置。写完后 AI 把 `test_cases_approval.status` 写成 `pending`，表示已经生成。没有这个写完标记，计划会话不结束。生成过程没有澄清阶段。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
 - QA 在自己环境通读这份用例，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
 - 该状态**不进核心门禁**：计划确认后进入 `split_tasks` → `implement_code` 都不会等待 QA 把用例改成 `approved`。用例正文本身要先写好，计划会话才会结束。
 - `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。

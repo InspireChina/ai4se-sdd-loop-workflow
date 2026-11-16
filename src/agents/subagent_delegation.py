@@ -39,17 +39,16 @@ def _shared_rules(prompt_file: Path, output_label: str) -> str:
 {launch}
 
 子代理的当前目录与本会话相同，是业务项目根。不要改到引擎仓库。
-用例文件与计划文件使用同一个角色后缀：只做后端是 `backend`，只做前端是 `front`，两边都做是 `all`。
-目标是 `{output_label}`。不要写不带后缀的 `02-test-cases.md`。
+用例不分前后端，写成一份整体。报告写到 `{output_label}`。用例正文放在报告同目录的 `attachments/`，报告里写明位置。
 你禁止自己写用例。子代理在后台写文件的同时，你继续完成本会话的计划工作。
-在把计划文件里的 `plan_approval` 写成 `approved` 之前，确认用例文件里已经有 `test_cases_approval.status: pending`（人已经确认过则是 `approved`）。没有这个确认块表示用例还在写，不要收尾。
+在把计划文件里的 `plan_approval` 写成 `approved` 之前，确认用例报告里已经有 `test_cases_approval.status: pending`（人已经确认过则是 `approved`）。没有这个写完标记表示用例还在写，不要收尾。
 """
 
 
 def _cursor(prompt_file: Path, output_label: str) -> str:
-    return f"""## 启动动作（先定角色，再拉起用例）
+    return f"""## 启动动作（拉起用例）
 
-先确定这次是只做后端、只做前端，还是两边都做，并选定文件名后缀（`backend` / `front` / `all`）。然后立刻用 Task 工具启动且只启动一个后台 subagent，再继续写计划。不要等它结束才开始写计划。
+立刻用 Task 工具启动且只启动一个后台 subagent，再继续写计划。不要等它结束才开始写计划。用例不分前后端。
 
 Task 参数必须是：
 - subagent_type: `generalPurpose`
@@ -61,9 +60,9 @@ Task 参数必须是：
 
 
 def _claude_code(prompt_file: Path, output_label: str) -> str:
-    return f"""## 启动动作（先定角色，再拉起用例）
+    return f"""## 启动动作（拉起用例）
 
-先确定这次是只做后端、只做前端，还是两边都做，并选定文件名后缀（`backend` / `front` / `all`）。然后立刻调用 Task，只调用一次，让它在后台跑，再继续写计划。不要等它写完才开始写计划。若当前工具列表里没有 Task、只有 Agent，就调用 Agent。
+立刻调用 Task，只调用一次，让它在后台跑，再继续写计划。不要等它写完才开始写计划。用例不分前后端。若当前工具列表里没有 Task、只有 Agent，就调用 Agent。
 
 参数必须是：
 - subagent_type: `general-purpose`（不要用 Explore 或 Plan）
@@ -75,9 +74,9 @@ def _claude_code(prompt_file: Path, output_label: str) -> str:
 
 
 def _codex(prompt_file: Path, output_label: str) -> str:
-    return f"""## 启动动作（先定角色，再拉起用例）
+    return f"""## 启动动作（拉起用例）
 
-先确定这次是只做后端、只做前端，还是两边都做，并选定文件名后缀（`backend` / `front` / `all`）。然后立刻调用 spawn_agent，只调用一次，再继续写计划。不要等它写完才开始写计划。子代理还在写文件时，不要调用 interrupt_agent 或 close_agent，也不要另开 shell 去等文件出现。
+立刻调用 spawn_agent，只调用一次，再继续写计划。不要等它写完才开始写计划。用例不分前后端。子代理还在写文件时，不要调用 interrupt_agent 或 close_agent，也不要另开 shell 去等文件出现。
 
 参数必须是：
 - fork_turns: `none`。新线程从空白开始，只接收下面的 message，不要带上本会话已经说过的内容
@@ -88,9 +87,9 @@ def _codex(prompt_file: Path, output_label: str) -> str:
 
 
 def _oh_my_pi(prompt_file: Path, output_label: str) -> str:
-    return f"""## 启动动作（先定角色，再拉起用例）
+    return f"""## 启动动作（拉起用例）
 
-先确定这次是只做后端、只做前端，还是两边都做，并选定文件名后缀（`backend` / `front` / `all`）。然后立刻调用 task，只调用一次，再继续写计划。不要等它写完才开始写计划。
+立刻调用 task，只调用一次，再继续写计划。不要等它写完才开始写计划。用例不分前后端。
 
 这一次调用只放一个子任务，按下面的字段填：
 - context: `按 task 字段里的文件写测试用例`

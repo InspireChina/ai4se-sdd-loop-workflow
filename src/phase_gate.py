@@ -128,7 +128,7 @@ def _validate_requirements_final(content: str) -> bool:
 def _validate_test_cases_final(content: str, cfg: PhaseConfig) -> bool:
     """用例写完的标志是确认块落成 pending 或 approved。
 
-    pending：AI 已写完，等待人工澄清。approved：人已经确认。
+    pending：用例已经生成。approved：人已经确认。
     块还没写出来表示仍在写，不能放行。
     """
     if not _validate_generic_final(content, cfg):
@@ -161,19 +161,12 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
 }
 
 
-def _role_file_ready(docs_dir: Path, node_id: str, final_path: Path, content: str) -> bool:
-    """计划及用例文件必须带角色后缀，并且和计划角色一致。"""
+def _role_file_ready(_docs_dir: Path, node_id: str, final_path: Path, content: str) -> bool:
+    """计划文件必须带角色后缀，并且和计划角色一致。用例报告不分角色。"""
     if node_id == "plan_session":
         file_role = role_from_filename(final_path.name)
         meta_role, _blocks, _basis = parse_plan_role(content, final_path.name)
         return bool(file_role) and meta_role == file_role
-    if node_id == "design_test_cases":
-        file_role = role_from_filename(final_path.name)
-        if not file_role:
-            return False
-        plan = find_output(docs_dir, "02-plan.md")
-        if plan and role_from_filename(plan.name) not in (None, file_role):
-            return False
     return True
 
 
@@ -231,7 +224,7 @@ def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> boo
 def plan_session_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
     """计划会话结束：`02-plan.md` 已确认，且用例已写完。
 
-    用例写完的标志是 `test_cases_approval` 为 `pending`（等待人工澄清）或 `approved`。
+    用例写完的标志是 `test_cases_approval` 为 `pending`（已经生成）或 `approved`。
     不要求人已经把用例改成 `approved`。
     """
     if not phase_complete(docs_dir, "plan_session", state):
