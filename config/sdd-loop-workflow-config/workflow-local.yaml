@@ -15,6 +15,16 @@ project_docs_dir: ""
 # 每个节点在下方 nodes.<id>.recommendation_threshold 单独配置；未配置时回退默认 0.8。
 # 调低则更多项自动采纳、更少打断，调高则更多项需用户确认。
 
+# 各节点默认用下面的 tool、model。
+# 某个节点要单独换时，在该节点下写 tool、model，优先于这里的 defaults。
+# model 留空表示用该 tool 自己的默认模型。
+# tool 可写：claude_code、cursor、codex、oh_my_pi（omp 同样）、echo。
+#
+# 例：只把计划节点换成 cursor，其它节点仍用 defaults
+# plan_session:
+#   tool: cursor
+#   model: ""
+#   recommendation_threshold: 0.8
 defaults:
   tool: claude_code
   model: ""
