@@ -181,18 +181,70 @@ def _restore_yaml_scalar(path: Path, key: str, value: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _format_extend_rules_block(rules: list[str]) -> str:
+    if not rules:
+        return "    extend_rules: []"
+    lines = ["    extend_rules:"]
+    for item in rules:
+        lines.append(f"      - {json.dumps(item, ensure_ascii=False)}")
+    return "\n".join(lines)
+
+
+def _restore_node_extend_rules(text: str, node_id: str, rules: list[str]) -> str:
+    """把一个节点的 extend_rules 写回模板文本，保留文件里的注释。"""
+    block = _format_extend_rules_block(rules)
+    pattern = (
+        rf"(?m)^(  {re.escape(node_id)}:\n(?:    (?!extend_rules:).*\n)*)"
+        rf"    extend_rules:(?: \[])?(?:\n      - .*)*"
+    )
+    if re.search(pattern, text):
+        return re.sub(pattern, rf"\g<1>{block}", text, count=1)
+    insert_at = rf"(?m)^(  {re.escape(node_id)}:\n(?:    .*\n)*)"
+    if re.search(insert_at, text):
+        return re.sub(insert_at, rf"\g<1>{block}\n", text, count=1)
+    return text
+
+
+def _collect_extend_rules(legacy: dict, current: dict) -> dict[str, list[str]]:
+    """合并旧 ai-rules.yaml 与 workflow-local.yaml 的规则路径。
+
+    节点没写 extend_rules 时沿用旧文件。workflow-local 里的非空列表优先。
+    空列表不盖掉旧文件里已经写过的路径。
+    """
+    from .config_loader import node_extend_rules
+
+    found: dict[str, list[str]] = {}
+
+    def take(source: dict, *, empty_keeps_existing: bool) -> None:
+        nodes = source.get("nodes") or {}
+        if not isinstance(nodes, dict):
+            return
+        for node_id, raw in nodes.items():
+            rules = node_extend_rules(raw)
+            if rules is None:
+                continue
+            key = str(node_id)
+            if not rules and empty_keeps_existing and key in found:
+                continue
+            found[key] = rules
+
+    take(legacy, empty_keeps_existing=False)
+    take(current, empty_keeps_existing=True)
+    return found
+
+
 def install_app_config(engine: Path, app_root: Path) -> list[str]:
     """在业务根同步 sdd-loop-workflow-config。
 
-    ``ai-rules.yaml`` 与 ``suggestion-confidence-rules.yaml`` 保留不覆盖。
+    ``suggestion-confidence-rules.yaml`` 保留不覆盖。
     规则 markdown 不写入业务项目。``workflow-local.yaml`` 覆盖为模板后，
-    再按用户输入写回 ``project_docs_dir``。
+    再写回 ``project_docs_dir`` 和各节点 ``extend_rules``。
     """
     src_root = _engine_app_config_template(engine)
     dest_root = app_root / APP_CONFIG_DIR_NAME
     dest_root.mkdir(parents=True, exist_ok=True)
     actions: list[str] = []
-    preserve_names = {AI_RULES_CONFIG_FILENAME, SUGGESTION_CONFIDENCE_RULES_FILENAME}
+    preserve_names = {SUGGESTION_CONFIDENCE_RULES_FILENAME}
 
     for src in sorted(src_root.rglob("*")):
         if not src.is_file():
@@ -270,7 +322,13 @@ def command_init(argv: list[str]) -> int:
     app_root = resolve_app_root(engine, args.app_root)
     from .requirement_dir import project_docs_dir_with_legacy_project
 
-    saved = _load_yaml_mapping(_workflow_local_path(app_root))
+    workflow_path = _workflow_local_path(app_root)
+    legacy_rules_path = app_root / APP_CONFIG_DIR_NAME / AI_RULES_CONFIG_FILENAME
+    saved = _load_yaml_mapping(workflow_path)
+    saved_rules = _collect_extend_rules(
+        _load_yaml_mapping(legacy_rules_path),
+        saved,
+    )
     saved_docs = str(saved.get("project_docs_dir") or saved.get("team_docs_dir") or "")
     saved_project_docs_dir = project_docs_dir_with_legacy_project(
         saved_docs,
@@ -288,6 +346,15 @@ def command_init(argv: list[str]) -> int:
 
     for line in configure_project_docs(app_root, saved_project_docs_dir):
         print(f"==> {line}")
+    if saved_rules and workflow_path.is_file():
+        text = workflow_path.read_text(encoding="utf-8")
+        for node_id, rules in saved_rules.items():
+            text = _restore_node_extend_rules(text, node_id, rules)
+        workflow_path.write_text(text, encoding="utf-8")
+        print("==> 已写回各节点 extend_rules")
+    if legacy_rules_path.is_file():
+        legacy_rules_path.unlink()
+        print("==> 已合并 ai-rules.yaml 到 workflow-local.yaml，并删除旧文件")
     return 0
 
 

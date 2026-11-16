@@ -87,10 +87,22 @@ def _parse_input(raw: dict[str, str]) -> NodeInput:
     raise ValueError(f"Invalid node input config: {raw}")
 
 
-def _parse_rule_list(raw: Any) -> list[str]:
-    if not isinstance(raw, list):
+def node_extend_rules(raw: Any) -> list[str] | None:
+    """节点上的扩展规则路径。没有 ``extend_rules`` 键时返回 None。
+
+    旧 ``ai-rules.yaml`` 里节点的值直接是路径列表，同样能读。
+    """
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, dict) and "extend_rules" in raw:
+        items = raw.get("extend_rules") or []
+        if isinstance(items, str):
+            items = [items]
+    else:
+        return None
+    if not isinstance(items, list):
         return []
-    return [str(item).strip() for item in raw if str(item).strip()]
+    return [str(item).strip() for item in items if str(item).strip()]
 
 
 def _as_str(value: Any) -> str:
@@ -112,31 +124,42 @@ def app_config_dir(app_root: Path) -> Path:
     return app_root.resolve() / APP_CONFIG_DIR_NAME
 
 
+def _rules_from_nodes(nodes_raw: Any) -> tuple[dict[str, list[str]], set[str]]:
+    """返回（有路径的节点, 显式写了 extend_rules 的节点）。"""
+    found: dict[str, list[str]] = {}
+    explicit: set[str] = set()
+    if not isinstance(nodes_raw, dict):
+        return found, explicit
+    for node_id, raw in nodes_raw.items():
+        rules = node_extend_rules(raw)
+        if rules is None:
+            continue
+        explicit.add(str(node_id))
+        if rules:
+            found[str(node_id)] = rules
+    return found, explicit
+
+
 def load_ai_rules_config(app_root: Path) -> dict[str, list[str]]:
-    """从业务根 ai-rules.yaml 加载各节点的规则路径。
+    """从 workflow-local.yaml 的 ``nodes.<id>.extend_rules`` 加载规则路径。
 
-    每条路径相对 ``project_docs_dir``。
+    每条路径相对 ``project_docs_dir``。节点没写 ``extend_rules`` 时，仍读旧的
+    ``ai-rules.yaml`` 里同名节点。
     """
-    path = app_config_dir(app_root) / AI_RULES_CONFIG_FILENAME
-    if not path.is_file():
-        logger.warning(
-            "未找到 %s，各节点将不注入扩展规则"
-            "（请在业务项目根执行 sddl init）",
-            path,
-        )
-        return {}
+    settings = load_app_runtime_settings(app_root)
+    node_rules, explicit = _rules_from_nodes(settings.get("nodes"))
 
-    with open(path, encoding="utf-8") as f:
+    legacy_path = app_config_dir(app_root) / AI_RULES_CONFIG_FILENAME
+    if not legacy_path.is_file():
+        return node_rules
+    with open(legacy_path, encoding="utf-8") as f:
         data: dict[str, Any] = yaml.safe_load(f) or {}
-
-    nodes_raw = data.get("nodes") or {}
-    node_rules: dict[str, list[str]] = {}
-    if isinstance(nodes_raw, dict):
-        for node_id, raw in nodes_raw.items():
-            rules = _parse_rule_list(raw)
-            if rules:
-                node_rules[str(node_id)] = rules
-
+    if not isinstance(data, dict):
+        return node_rules
+    legacy_rules, _legacy_explicit = _rules_from_nodes(data.get("nodes"))
+    for node_id, rules in legacy_rules.items():
+        if node_id not in explicit:
+            node_rules[node_id] = rules
     return node_rules
 
 

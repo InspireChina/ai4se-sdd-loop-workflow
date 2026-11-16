@@ -57,8 +57,7 @@ sddl start --tool claude_code --file "/path/to/prd.md" --name login
 ```text
 your-project/
 ├── sdd-loop-workflow-config/     # 业务配置（改这里）
-│   ├── workflow-local.yaml       # project_docs_dir + defaults.tool/model（覆盖引擎）
-│   ├── ai-rules.yaml             # 扩展说明；规则正文不从这里注入
+│   ├── workflow-local.yaml       # project_docs_dir、tool/model、各节点 extend_rules
 │   └── suggestion-confidence-rules.yaml  # suggestion_confidence 打分规则（叠加引擎基线）
 └── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
 ```
@@ -66,11 +65,11 @@ your-project/
 | 文件 | 作用 |
 |------|------|
 | `common_extend_rules/` 与 `repos/<仓库名>/extend_rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：公共规则，以及做到该仓库时再读的仓库规则 |
-| `workflow-local.yaml` | `project_docs_dir`（团队共享目录中的项目目录）；按节点 `recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
+| `workflow-local.yaml` | `project_docs_dir`；按节点 `recommendation_threshold`（默认 0.8）；**`defaults.tool` / 按节点 `tool`·`model`**；各节点 `extend_rules`（要读的规则 md，见 §5） |
 | `suggestion-confidence-rules.yaml` | `suggestion_confidence` 把握规则（详见 [§6](#6-suggestion_confidence-把握规则)）：引擎通用基线 + 项目扩展叠加 |
 | `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
 
-`sddl init` 同步策略：`start-workflow` skill 与 `workflow-local.yaml` 覆盖为引擎最新模板；已存在的 **`ai-rules.yaml`、`suggestion-confidence-rules.yaml` 不覆盖**。随后只询问 `project_docs_dir` 地址并写入配置，不创建该目录。未输入地址时该项为空，`sddl start` 会失败。
+`sddl init` 同步策略：`start-workflow` skill 与 `workflow-local.yaml` 覆盖为引擎最新模板，并写回原来的 `project_docs_dir` 和各节点 `extend_rules`。已存在的 **`suggestion-confidence-rules.yaml` 不覆盖**。若还有旧的 `ai-rules.yaml`，其中的路径会并进 `workflow-local.yaml` 后删除旧文件。随后只询问 `project_docs_dir` 地址并写入配置，不创建该目录。未输入地址时该项为空，`sddl start` 会失败。
 
 目录约定：
 
@@ -183,7 +182,7 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 
 ## 5. 核心扩展点：`ai-rules`
 
-规则正文不写进节点 prompt。业务项目根的 `sdd-loop-workflow-config/ai-rules.yaml` 用 `nodes.<节点ID>` 列出该节点要读的 md，路径相对 `project_docs_dir`。生成 `temp-prompts/<节点>.prompt.md` 时，只把这些文件复制到同级 `references/`：公共文件名为 `common_<文件名>.md`，仓库文件名为 `<仓库名>_<文件名>.md`。计划定稿把本次要改的仓库写入带角色后缀的计划文件的 `plan_metadata.involved_repos`。**改规则时改 `project_docs_dir` 下的源文件**，不必改引擎 `prompts/`。
+规则正文不写进节点 prompt。业务项目根的 `sdd-loop-workflow-config/workflow-local.yaml` 在 `nodes.<节点ID>.extend_rules` 列出该节点要读的 md，路径相对 `project_docs_dir`。生成 `temp-prompts/<节点>.prompt.md` 时，只把这些文件复制到同级 `references/`：公共文件名为 `common_<文件名>.md`，仓库文件名为 `<仓库名>_<文件名>.md`。计划定稿把本次要改的仓库写入带角色后缀的计划文件的 `plan_metadata.involved_repos`。**改规则时改 `project_docs_dir` 下的源文件**，不必改引擎 `prompts/`。
 
 公共扩展规则的目录是 `project_docs_dir/common_extend_rules/`，和 `repos/` 平级：
 
@@ -194,7 +193,7 @@ sddl start --file "/path/to/prd.md" --name login --fresh
     repos/<仓库名>/extend_rules/<文件名>.md      # 该仓库的扩展规则
 ```
 
-`ai-rules.yaml` 里按节点写相对路径，例如 `common_extend_rules/<文件名>.md`。公共规则只要该节点配了就会读，不看 `involved_repos`。仓库规则要同时满足两件：该节点配了这条路径，并且仓库名在 `plan_metadata.involved_repos` 里。
+`workflow-local.yaml` 里按节点写相对路径，例如 `common_extend_rules/<文件名>.md`。公共规则只要该节点的 `extend_rules` 配了就会读，不看 `involved_repos`。仓库规则要同时满足两件：该节点配了这条路径，并且仓库名在 `plan_metadata.involved_repos` 里。
 
 | 目录 | 作用 |
 |------|------|
@@ -205,20 +204,22 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 
 ### 怎么扩展
 
-1. 公共约定写到 `project_docs_dir/common_extend_rules/<文件名>.md`，只属于某个仓库的约定写到 `project_docs_dir/repos/<仓库名>/extend_rules/<文件名>.md`。再把这两条相对 `project_docs_dir` 的路径写进业务项目 `sdd-loop-workflow-config/ai-rules.yaml` 的 `nodes.<节点ID>`。可参考引擎模板 `config/sdd-loop-workflow-config/ai-rules/project-standards.md`。
+1. 公共约定写到 `project_docs_dir/common_extend_rules/<文件名>.md`，只属于某个仓库的约定写到 `project_docs_dir/repos/<仓库名>/extend_rules/<文件名>.md`。再把这两条相对 `project_docs_dir` 的路径写进 `sdd-loop-workflow-config/workflow-local.yaml` 的 `nodes.<节点ID>.extend_rules`。
 
 ```yaml
 nodes:
   analyze_requirements:
-    - common_extend_rules/<文件名>.md
+    extend_rules:
+      - common_extend_rules/<文件名>.md
   plan_session:
-    - common_extend_rules/<文件名>.md
-    - repos/<仓库名>/extend_rules/<文件名>.md
+    extend_rules:
+      - common_extend_rules/<文件名>.md
+      - repos/<仓库名>/extend_rules/<文件名>.md
 ```  
 2. 某节点要用项目已有的 **MCP / IDE·Agent Rules / Skills** 时：写在对应 md 里——**不要**在 yaml 里另配工具表。
 
 ```markdown
-# project-standards.md（或节点专用 md）里引用工具
+# 规则 md 里引用工具
 
 - MCP：`user-jira` — 澄清时按 issue key 拉取描述与验收标准
 - Rules：遵守仓库 `.cursor/rules/api-compat.mdc`

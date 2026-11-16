@@ -25,6 +25,16 @@ project_docs_dir: ""
 #   tool: cursor
 #   model: ""
 #   recommendation_threshold: 0.8
+#
+# 各节点要读的扩展规则写在 extend_rules，路径相对 project_docs_dir：
+#   common_extend_rules/<文件名>.md
+#   repos/<仓库名>/extend_rules/<文件名>.md
+# 公共规则只要该节点配了就读。仓库规则还要属于计划里的 involved_repos。
+# 例：
+#   plan_session:
+#     extend_rules:
+#       - common_extend_rules/<文件名>.md
+#       - repos/<仓库名>/extend_rules/<文件名>.md
 defaults:
   tool: claude_code
   model: ""
@@ -32,17 +42,25 @@ defaults:
 nodes:
   analyze_requirements:
     recommendation_threshold: 0.8
+    extend_rules: []
   plan_session:
     recommendation_threshold: 0.8
+    extend_rules: []
   design_test_cases:
     recommendation_threshold: 0.8
+    extend_rules: []
   split_tasks:
     recommendation_threshold: 0.8
+    extend_rules: []
   implement_code:
     recommendation_threshold: 0.8
+    extend_rules: []
   verify_tests:
     recommendation_threshold: 0.8
+    extend_rules: []
   ai_review:
     recommendation_threshold: 0.8
+    extend_rules: []
   commit_code:
     recommendation_threshold: 0.8
+    extend_rules: []

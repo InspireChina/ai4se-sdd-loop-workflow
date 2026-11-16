@@ -61,7 +61,7 @@ def _classify_rule(project_docs_dir: Path, src: Path) -> tuple[str, str, Path] |
 
 
 def _locate_configured_rule(project_docs_dir: Path, raw: str) -> list[Path]:
-    """把 ai-rules.yaml 里的一条路径解析成项目文档目录下的文件。"""
+    """把 workflow-local.yaml 里的一条扩展规则路径解析成项目文档目录下的文件。"""
     text = raw.strip().lstrip("/")
     if not text:
         return []
