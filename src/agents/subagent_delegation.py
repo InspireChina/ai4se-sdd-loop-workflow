@@ -38,6 +38,7 @@ def _shared_rules(prompt_file: Path, output_label: str) -> str:
 
 {launch}
 
+子代理的当前目录与本会话相同，是业务项目根。不要改到引擎仓库。
 用例文件与计划文件使用同一个角色后缀：只做后端是 `backend`，只做前端是 `front`，两边都做是 `all`。
 目标是 `{output_label}`。不要写不带后缀的 `02-test-cases.md`。
 你禁止自己写用例。子代理在后台写文件的同时，你继续完成本会话的计划工作。

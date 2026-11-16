@@ -139,8 +139,17 @@ def build_suggestion_confidence_prompt(
     return "\n".join(lines)
 
 _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
-_CODE_WORK_NODES = frozenset(
-    {"implement_code", "verify_tests", "ai_review", "commit_code"}
+# 工作目录用启动终端所在的业务项目根
+_APP_ROOT_NODES = frozenset(
+    {
+        "analyze_requirements",
+        "plan_session",
+        "design_test_cases",
+        "implement_code",
+        "verify_tests",
+        "ai_review",
+        "commit_code",
+    }
 )
 
 
@@ -613,8 +622,8 @@ class NodeRunner:
         )
 
     def _agent_cwd(self, node_id: str) -> Path:
-        """实现/测试节点在应用项目根执行；其余在本仓库（编排引擎）根目录。"""
-        if node_id in _CODE_WORK_NODES:
+        """这些节点在启动终端所在的业务项目根执行；其余在编排引擎根目录。"""
+        if node_id in _APP_ROOT_NODES:
             return self.app_root
         return self.project_root
 
@@ -672,7 +681,7 @@ class NodeRunner:
         test_prompt = self._render_node_prompt("design_test_cases", state)
         prompt_file = save_node_prompt(
             test_prompt,
-            str(self._agent_cwd("plan_session")),
+            str(self._agent_cwd("design_test_cases")),
             node_id="design_test_cases",
             prompt_dir=str(docs_dir),
         )

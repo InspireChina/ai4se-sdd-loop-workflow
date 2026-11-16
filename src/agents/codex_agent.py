@@ -3,7 +3,7 @@
 与 Claude / omp / Cursor 同一套路：长 prompt 落盘，argv 只传短「去读该文件」指令。
 差异仅两处：
 1. 启动指令必须是**单行**（Windows 转发多行 argv 时常只剩第一行，路径会丢）
-2. 放大权限并 ``-C`` 到含 prompt 的仓库根，保证能读到业务仓文件
+2. 放大权限并 ``-C`` 到本次节点的工作目录（业务项目根或引擎根）
 
 文档：https://developers.openai.com/codex/noninteractive
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .base import AITool, AIToolResult, CompletionCheck
 from .interactive_runner import run_interactive_subprocess
-from .prompt_file import TEMP_PROMPT_DIR, save_node_prompt
+from .prompt_file import save_node_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -179,12 +179,8 @@ class CodexTool(AITool):
 
     @staticmethod
     def _workspace_root(prompt_file: Path, cwd: str) -> Path:
-        path = prompt_file.resolve()
-        for parent in (path.parent, *path.parents):
-            if (parent / ".git").exists():
-                return parent
-        if path.parent.name == TEMP_PROMPT_DIR:
-            return path.parent.parent
+        """当前目录用节点选定的工作目录。提示词在外部文档仓，不能再沿 prompt 文件找 git 根。"""
+        del prompt_file
         return Path(cwd).resolve()
 
     @staticmethod
