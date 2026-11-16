@@ -36,7 +36,7 @@
 
 {{role_scope}}
 
-`02-test-cases.md` 最开头、任何 YAML 之前先写「角色与版块」，照抄上面的角色、版块、依据。
+`{{output_test_cases}}` 最开头、任何 YAML 之前先写「角色与版块」。上面若是「未识别」，以计划主会话正在写的计划文件为准：`02-plan-backend.md` 对应用例 `02-test-cases-backend.md`，`02-plan-front.md` 对应 `02-test-cases-front.md`，`02-plan-all.md` 对应 `02-test-cases-all.md`。角色、版块、依据和文件名后缀都跟那份计划一致。不要写不带后缀的 `02-test-cases.md`。
 
 ## 产出路径
 
@@ -48,4 +48,4 @@
 2. 用例总览、明细、追溯关系齐全
 3. 正文写完后，最后一次写入才加上 `test_cases_approval`，`status` 写 `pending`。这表示 AI 写完、等待人工澄清。写的过程中不要先放这个块
 4. 不确定项写入待 review 清单（每条带清晰 `suggestion` 并配 `suggestion_reason` 写明推荐依据；用自然语言完整描述，禁止 `d2`/`m0` 等代号指代模块/规则/配置，须写全名 + 一句话说明）
-5. 直接写入 `02-test-cases.md`；完整内容经写文件工具写入 `{{final_output_path}}`
+5. 直接写入 `{{output_test_cases}}`；完整内容经写文件工具写入 `{{final_output_path}}`

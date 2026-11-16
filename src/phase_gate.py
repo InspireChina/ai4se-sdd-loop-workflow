@@ -6,9 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .parsers.approval_parser import parse_approval, parse_plan_metadata, read_approval_status
+from .parsers.approval_parser import (
+    parse_approval,
+    parse_plan_metadata,
+    parse_plan_role,
+    read_approval_status,
+)
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
+from .role_output import find_output, role_from_filename, write_output_path
 from .state import DevWorkflowState
 
 
@@ -25,8 +31,37 @@ class PhaseConfig:
     allow_unresolved_checklist: bool = False
 
 
-def resolve_doc_path(docs_dir: Path, doc_key: str) -> Path:
-    return docs_dir / doc_key
+def delivery_role_from_docs(docs_dir: Path, state: DevWorkflowState) -> str:
+    """后续节点用的角色。state 里已有就用 state，否则读计划文件。"""
+    role = str(state.get("delivery_role") or "")
+    if role and role != "unknown":
+        return role
+    plan = find_output(docs_dir, "02-plan.md")
+    if not plan:
+        return ""
+    parsed, _blocks, _basis = parse_plan_role(
+        plan.read_text(encoding="utf-8"), plan.name
+    )
+    return "" if parsed == "unknown" else parsed
+
+
+def resolve_doc_path(
+    docs_dir: Path, doc_key: str, role: str | None = None
+) -> Path:
+    lookup = None if not role or role == "unknown" else role
+    found = find_output(docs_dir, doc_key, lookup)
+    if found:
+        return found
+    return write_output_path(docs_dir, doc_key, lookup)
+
+
+def _stage_file(docs_dir: Path, node_id: str, state: DevWorkflowState) -> Path | None:
+    cfg = PHASE_CONFIGS.get(node_id)
+    if not cfg:
+        return None
+    role = delivery_role_from_docs(docs_dir, state)
+    lookup = None if cfg.final_file == "02-plan.md" else (role or None)
+    return find_output(docs_dir, cfg.final_file, lookup)
 
 
 PHASE_CONFIGS: dict[str, PhaseConfig] = {
@@ -126,6 +161,22 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
 }
 
 
+def _role_file_ready(docs_dir: Path, node_id: str, final_path: Path, content: str) -> bool:
+    """计划及用例文件必须带角色后缀，并且和计划角色一致。"""
+    if node_id == "plan_session":
+        file_role = role_from_filename(final_path.name)
+        meta_role, _blocks, _basis = parse_plan_role(content, final_path.name)
+        return bool(file_role) and meta_role == file_role
+    if node_id == "design_test_cases":
+        file_role = role_from_filename(final_path.name)
+        if not file_role:
+            return False
+        plan = find_output(docs_dir, "02-plan.md")
+        if plan and role_from_filename(plan.name) not in (None, file_role):
+            return False
+    return True
+
+
 def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -> bool:
     """定稿 md 结构完整（正文达标）；默认还要求澄清清单已消解。
 
@@ -135,8 +186,8 @@ def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -
     if not cfg:
         return False
 
-    final_path = docs_dir / cfg.final_file
-    if not final_path.exists():
+    final_path = _stage_file(docs_dir, node_id, state)
+    if final_path is None:
         return False
 
     content = final_path.read_text(encoding="utf-8")
@@ -144,16 +195,20 @@ def phase_content_ready(docs_dir: Path, node_id: str, state: DevWorkflowState) -
         return False
 
     validator = CONTENT_VALIDATORS.get(node_id, _validate_generic_final)
-    return validator(content, cfg)
+    if not validator(content, cfg):
+        return False
+    return _role_file_ready(docs_dir, node_id, final_path, content)
 
 
-def phase_user_approved(docs_dir: Path, node_id: str) -> bool:
+def phase_user_approved(
+    docs_dir: Path, node_id: str, state: DevWorkflowState | None = None
+) -> bool:
     cfg = PHASE_CONFIGS.get(node_id)
     if not cfg:
         return False
 
-    final_path = docs_dir / cfg.final_file
-    if not final_path.exists():
+    final_path = _stage_file(docs_dir, node_id, state or {})
+    if final_path is None:
         return False
 
     approval = parse_approval(final_path.read_text(encoding="utf-8"), cfg.approval_block)
@@ -170,7 +225,7 @@ def phase_complete(docs_dir: Path, node_id: str, state: DevWorkflowState) -> boo
     # --auto：内容就绪即过门禁，不等人写 approved
     if state.get("auto"):
         return True
-    return phase_user_approved(docs_dir, node_id)
+    return phase_user_approved(docs_dir, node_id, state)
 
 
 def plan_session_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
@@ -182,10 +237,6 @@ def plan_session_complete(docs_dir: Path, state: DevWorkflowState) -> bool:
     if not phase_complete(docs_dir, "plan_session", state):
         return False
     return phase_content_ready(docs_dir, "design_test_cases", state)
-
-
-def requirements_content_ready(docs_dir: Path, state: DevWorkflowState) -> bool:
-    return phase_content_ready(docs_dir, "analyze_requirements", state)
 
 
 def requirements_complete(docs_dir: Path, state: DevWorkflowState) -> bool:

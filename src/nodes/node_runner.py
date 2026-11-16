@@ -29,17 +29,22 @@ from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_plan_approval,
     parse_plan_metadata,
+    parse_plan_role,
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
-from ..parsers.requirement_parser import (
-    RequirementMetadata,
-    format_role_scope,
-    parse_requirement_metadata,
-)
+from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
+from ..role_output import (
+    ROLE_SCOPED_OUTPUTS,
+    find_output,
+    format_role_scope,
+    output_hint,
+    role_from_filename,
+    write_output_path,
+)
 from ..phase_gate import (
     PHASE_CONFIGS,
     get_phase_config,
@@ -61,13 +66,35 @@ def _hydrate_involved_repos(
     """state 里已有涉及仓库就不动。没有则从 02-plan.md 读一次，交给调用方写回 state。"""
     if state.get("involved_repos") is not None:
         return {}
-    plan_path = docs_dir / "02-plan.md"
-    if not plan_path.is_file():
+    plan_path = find_output(docs_dir, "02-plan.md")
+    if plan_path is None:
         return {}
     present, repos = parse_plan_metadata(plan_path.read_text(encoding="utf-8"))
     if not present:
         return {}
     return {"involved_repos": repos}
+
+
+def _hydrate_delivery_role(
+    docs_dir: Path, state: DevWorkflowState
+) -> dict[str, object]:
+    """state 里已有计划角色就不动。没有则从计划文件读一次。"""
+    role = str(state.get("delivery_role") or "")
+    if role and role != "unknown":
+        return {}
+    plan_path = find_output(docs_dir, "02-plan.md")
+    if plan_path is None:
+        return {}
+    parsed, blocks, basis = parse_plan_role(
+        plan_path.read_text(encoding="utf-8"), plan_path.name
+    )
+    if parsed == "unknown":
+        return {}
+    return {
+        "delivery_role": parsed,
+        "delivery_blocks": blocks,
+        "role_basis": basis,
+    }
 
 
 def _format_rule_list(rules: list, label: str) -> list[str]:
@@ -129,6 +156,7 @@ class NodeRunner:
         docs_dir = self._resolve_docs_dir(state)
 
         hydrated = _hydrate_involved_repos(docs_dir, state)
+        hydrated.update(_hydrate_delivery_role(docs_dir, state))
         if hydrated:
             state = {**state, **hydrated}
 
@@ -146,7 +174,9 @@ class NodeRunner:
 
         tool = get_ai_tool(node_cfg.tool)
         agent_cwd = self._agent_cwd(node_id)
-        output_path = docs_dir / node_cfg.output_file
+        output_path = write_output_path(
+            docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         interactive = node_cfg.mode == "interactive"
@@ -220,6 +250,15 @@ class NodeRunner:
                 docs_dir, output_path, node_id, result
             )
 
+        role_now = str(state.get("delivery_role") or "")
+        found_output = find_output(
+            docs_dir,
+            node_cfg.output_file,
+            role_now if role_now and role_now != "unknown" else None,
+        )
+        if found_output is not None:
+            output_path = found_output
+
         updates: DevWorkflowState = {
             "current_node": node_id,
             "node_outputs": {
@@ -281,8 +320,8 @@ class NodeRunner:
     ) -> tuple[str, object]:
         cfg = get_phase_config(node_id)
         if cfg:
-            final = docs_dir / cfg.final_file
-            if final.exists():
+            final = find_output(docs_dir, cfg.final_file)
+            if final is not None:
                 text = final.read_text(encoding="utf-8").strip()
                 if text:
                     if not result.success:
@@ -313,7 +352,9 @@ class NodeRunner:
         min_chars = cfg.min_body_chars if cfg else 120
         candidates: list[Path] = []
         if cfg:
-            candidates.append(docs_dir / cfg.final_file)
+            found = find_output(docs_dir, cfg.final_file)
+            if found is not None:
+                candidates.append(found)
         if output_path not in candidates:
             candidates.append(output_path)
 
@@ -351,8 +392,8 @@ class NodeRunner:
         cfg = get_phase_config(node_cfg.node_id)
         target = output_path
         if cfg:
-            final_path = docs_dir / cfg.final_file
-            if final_path.exists():
+            final_path = find_output(docs_dir, cfg.final_file)
+            if final_path is not None:
                 target = final_path
 
         if target.exists() and body_content.strip():
@@ -365,6 +406,8 @@ class NodeRunner:
             target.write_text(upsert_workflow_status(body, status), encoding="utf-8")
             return
 
+        if not _can_create_output(node_cfg.output_file, output_path):
+            return
         body = self._strip_existing_status(body_content)
         if not body.strip():
             return
@@ -379,8 +422,8 @@ class NodeRunner:
 
         cfg = get_phase_config(node_id)
         if cfg:
-            final_path = docs_dir / cfg.final_file
-            if final_path.exists():
+            final_path = find_output(docs_dir, cfg.final_file)
+            if final_path is not None:
                 final_content = final_path.read_text(encoding="utf-8")
                 if node_id == "analyze_requirements":
                     metadata = parse_requirement_metadata(final_content)
@@ -398,16 +441,21 @@ class NodeRunner:
                     present, repos = parse_plan_metadata(final_content)
                     if present:
                         updates["involved_repos"] = repos
+                    role, blocks, basis = parse_plan_role(final_content, final_path.name)
+                    if role != "unknown":
+                        updates["delivery_role"] = role
+                        updates["delivery_blocks"] = blocks
+                        updates["role_basis"] = basis
 
                 checklist = parse_clarification_checklist(final_content)
                 if checklist.items:
                     updates.update(checklist.to_state())
 
         if node_id == "verify_tests":
-            report_path = docs_dir / "05-test-report.md"
+            report_path = find_output(docs_dir, "05-test-report.md")
             report = (
                 report_path.read_text(encoding="utf-8")
-                if report_path.exists()
+                if report_path is not None
                 else content
             )
             updates["test_passed"] = parse_test_passed(report)
@@ -441,7 +489,8 @@ class NodeRunner:
         cfg = get_phase_config(node_cfg.node_id)
         paths: list[Path] = [output_path]
         if cfg:
-            paths = [docs_dir / cfg.final_file]
+            found = find_output(docs_dir, cfg.final_file)
+            paths = [found] if found is not None else [output_path]
 
         for path in paths:
             if not path.exists():
@@ -456,8 +505,10 @@ class NodeRunner:
 
         if (
             cfg
+            and found is None
             and not output_path.exists()
             and body_content.strip()
+            and _can_create_output(node_cfg.output_file, output_path)
         ):
             wrapped = self._wrap_output(
                 node_cfg, self._strip_existing_status(body_content), result
@@ -571,7 +622,9 @@ class NodeRunner:
         """subagent 已经把文件写好时，补审批解析和 Workflow 状态，不再起 CLI。"""
         node_cfg = self.workflow_config.nodes[node_id]
         docs_dir = self._resolve_docs_dir(state)
-        output_path = docs_dir / node_cfg.output_file
+        output_path = write_output_path(
+            docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+        )
         if not phase_content_ready(docs_dir, node_id, state):
             return {"last_error": f"{node_id} 产出未就绪（{output_path}）"}
 
@@ -609,9 +662,11 @@ class NodeRunner:
 
     def _testcase_delegation_block(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_dir(state)
-        output_path = docs_dir / "02-test-cases.md"
+        output_label = output_hint(
+            docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
+        )
         if phase_content_ready(docs_dir, "design_test_cases", state):
-            return testcase_ready_note(output_path)
+            return testcase_ready_note(output_label)
 
         tool_name = self.workflow_config.nodes["plan_session"].tool
         test_prompt = self._render_node_prompt("design_test_cases", state)
@@ -621,7 +676,7 @@ class NodeRunner:
             node_id="design_test_cases",
             prompt_dir=str(docs_dir),
         )
-        return testcase_delegation(tool_name, prompt_file, output_path)
+        return testcase_delegation(tool_name, prompt_file, output_label)
 
     def _render_node_prompt(self, node_id: str, state: DevWorkflowState) -> str:
         node_cfg = self.workflow_config.nodes[node_id]
@@ -651,8 +706,31 @@ class NodeRunner:
                 )
             ),
             "docs_dir": str(docs_dir),
-            "output_path": str(docs_dir / node_cfg.output_file),
-            "node_output_path": str(docs_dir / node_cfg.output_file),
+            "output_path": output_hint(
+                docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+            ),
+            "node_output_path": output_hint(
+                docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+            ),
+            "output_plan": output_hint(docs_dir, "02-plan.md", str(state.get("delivery_role") or "")),
+            "output_test_cases": output_hint(
+                docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
+            ),
+            "output_tasks": output_hint(
+                docs_dir, "03-tasks.md", str(state.get("delivery_role") or "")
+            ),
+            "output_implementation": output_hint(
+                docs_dir, "04-implementation.md", str(state.get("delivery_role") or "")
+            ),
+            "output_test_report": output_hint(
+                docs_dir, "05-test-report.md", str(state.get("delivery_role") or "")
+            ),
+            "output_ai_review": output_hint(
+                docs_dir, "06-ai-review.md", str(state.get("delivery_role") or "")
+            ),
+            "output_commit": output_hint(
+                docs_dir, "07-commit.md", str(state.get("delivery_role") or "")
+            ),
             "skip_clarification_hint": (
                 "是 — 跳过与用户澄清，初稿无 pending 时直接输出定稿。"
                 if state.get("skip_clarification")
@@ -666,8 +744,9 @@ class NodeRunner:
         }
 
         cfg = get_phase_config(node_cfg.node_id)
+        role = str(state.get("delivery_role") or "")
         if cfg:
-            context["final_output_path"] = str(docs_dir / cfg.final_file)
+            context["final_output_path"] = output_hint(docs_dir, cfg.final_file, role)
         else:
             context["final_output_path"] = str(docs_dir / "01-requirements.md")
 
@@ -675,7 +754,9 @@ class NodeRunner:
             if inp.kind == "state":
                 context[inp.key] = self._format_state_value(state.get(inp.key), inp.key)
             elif inp.kind == "doc":
-                doc_path = resolve_doc_path(docs_dir, inp.key)
+                doc_path = resolve_doc_path(
+                    docs_dir, inp.key, str(state.get("delivery_role") or "")
+                )
                 context[inp.key.replace(".md", "").replace("-", "_")] = (
                     doc_path.read_text(encoding="utf-8") if doc_path.exists() else ""
                 )
@@ -789,6 +870,13 @@ class NodeRunner:
             header += f"> 备注: {result.message}\n"
         header += "\n---\n\n"
         return header + content
+
+def _can_create_output(logical: str, path: Path) -> bool:
+    """角色文件必须带后缀。角色还没定时，不要另写一份不带后缀的文件。"""
+    if logical not in ROLE_SCOPED_OUTPUTS:
+        return True
+    return role_from_filename(path.name) is not None
+
 
 def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 120) -> bool:
     if not output_path.exists():

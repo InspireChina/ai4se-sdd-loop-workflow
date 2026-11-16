@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from ..role_output import blocks_for_role, role_fields, role_from_filename
+
 APPROVAL_STATUSES = frozenset({"pending", "approved"})
 
 
@@ -74,6 +76,24 @@ def parse_plan_metadata(content: str) -> tuple[bool, list[str]]:
         if name and name not in names:
             names.append(name)
     return True, names
+
+
+def parse_plan_role(content: str, filename: str = "") -> tuple[str, list[str], str]:
+    """计划里的前后端角色。元数据优先，没有时用文件名后缀。"""
+    raw = _extract_yaml_block(content, "plan_metadata") or {}
+    fields = role_fields(
+        raw.get("delivery_role"),
+        raw.get("delivery_blocks"),
+        raw.get("role_basis"),
+    )
+    role = fields["delivery_role"]
+    blocks = list(fields["delivery_blocks"])
+    basis = fields["role_basis"]
+    if role == "unknown":
+        from_name = role_from_filename(filename)
+        if from_name:
+            return from_name, blocks_for_role(from_name), basis
+    return role, blocks, basis
 
 
 def parse_test_cases_approval(content: str) -> Approval:

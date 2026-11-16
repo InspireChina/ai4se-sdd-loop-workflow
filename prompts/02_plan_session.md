@@ -1,4 +1,4 @@
-> **运行模式：一次交互会话** — 本会话只产出 `02-plan.md`：写完实现计划，把澄清问完，用户确认后把 `plan_approval` 写成 `approved`。不要另写 `02-plan-review.md`。
+> **运行模式：一次交互会话** — 本会话只产出 `{{output_plan}}`：写完实现计划，把澄清问完，用户确认后把 `plan_approval` 写成 `approved`。不要另写 `02-plan-review.md`。
 > **测试用例不在本会话里写**。启动说明见文首。用例 review 仍由 QA 异步进行，不在本会话处理。
 
 {{subagent_delegation}}
@@ -7,7 +7,7 @@
 
 **写计划初稿 → 当场和用户澄清 → 按可行性/范围/契约再核对一遍 → 改计划 → 用户确认后定稿。**
 
-续跑时读取已有 `02-plan.md`，从还没问完的地方继续，不要推倒重写。
+续跑时读取已有 `{{output_plan}}`，从还没问完的地方继续，不要推倒重写。
 
 ## 工作方式（必须遵守）
 
@@ -16,16 +16,21 @@
 3. 简单至上。不要超出需求，不要为假想扩展加抽象。计划正文按下面的「计划正文结构」写。多种方案在本会话问完并写进正文，不要留给别的节点。
 4. 核对时只看架构与模块、接口/API 范围、数据模型与存储、里程碑与实施顺序、技术选型是否和仓库一致、风险与待决策项。不要把类名、JSON 字段、具体错误码当成要用户拍板的问题。不要 review 测试用例，不要做 plan 和用例的覆盖比对。
 
-## 本次角色
+## 本次角色（本节点确定）
+
+需求文档不区分前后端。本节点扫描仓库和需求，确定这次只做后端、只做前端，还是两边都做。续跑时若下面已经有角色，沿用，不要改后缀。
 
 {{role_scope}}
 
-向用户提第一个问题之前，先把这个角色说出来。`02-plan.md` 最开头、任何 YAML 之前写「角色与版块」，照抄上面的角色、版块、依据。
+识别信号：后端 = `pom.xml` / `go.mod` / `src/main/java` / `application.yml` 等；前端 = `package.json` 含 vue/react、`src/components`、`*.vue` / `*.tsx` 等。仓库两边都有时，再看这次需求实际改哪边。
 
-- 版块只有「后端」→ 只输出版块 A
-- 版块只有「前端」→ 只输出版块 B
-- 版块是「后端、前端」→ 版块 A、B 都输出
-- 上面是「未识别」→ 写入 `clarification_checklist`，正文注明「待澄清：本次角色未识别」，并在本会话里问完
+- 只做后端：`delivery_role: backend`，`delivery_blocks` 只有 `backend`，文件名后缀 `backend`，只输出版块 A
+- 只做前端：`delivery_role: frontend`，`delivery_blocks` 只有 `frontend`，文件名后缀 `front`，只输出版块 B
+- 两边都做：`delivery_role: both`，`delivery_blocks` 含 `backend` 和 `frontend`，文件名后缀 `all`，版块 A、B 都输出
+
+计划文件只能是 `{{output_plan}}` 里和角色对应的那一个。只做后端写 `02-plan-backend.md`，只做前端写 `02-plan-front.md`，两边都做写 `02-plan-all.md`。不要写不带后缀的 `02-plan.md`。用例文件用同一个后缀。
+
+文件最开头、任何 YAML 之前写「角色与版块」，角色、版块、依据和 `plan_metadata` 一致。向用户提第一个问题之前，先把这个角色说出来。分不清就在本会话里问完，定稿前不能留成未识别。
 
 ## 写作与提问语言
 
@@ -137,7 +142,7 @@
 #### B9. 新增或修改的配置
 - 环境变量、feature flag、构建配置等；不涉及则写「无」
 
-多种方案写进同一份 `02-plan.md` 的 `clarification_checklist`。提问时可以是 `pending`；用户答完后写上 `answer`，`status` 改成 `resolved`。本会话结束前 `all_resolved: true`，`pending_count: 0`。字段用下面的形状：
+多种方案写进同一份 `{{output_plan}}` 的 `clarification_checklist`。提问时可以是 `pending`；用户答完后写上 `answer`，`status` 改成 `resolved`。本会话结束前 `all_resolved: true`，`pending_count: 0`。字段用下面的形状：
 
 ```yaml clarification_checklist
 all_resolved: false
@@ -155,7 +160,7 @@ items:
     answer: ""
 ```
 
-核对结论写在 `02-plan.md` 末尾的「已确认结论」，不另写评审文件，也不写 `review_plan_approval`。
+核对结论写在 `{{output_plan}}` 末尾的「已确认结论」，不另写评审文件，也不写 `review_plan_approval`。
 
 ## 材料
 
@@ -178,21 +183,25 @@ items:
 
 只写这一个计划文件：`{{final_output_path}}`
 
-用例文件 `{{docs_dir}}/02-test-cases.md` 按文首说明处理，本会话不要自己写，也不要另建 review 文档。
+用例文件 `{{output_test_cases}}` 按文首说明处理，本会话不要自己写，也不要另建 review 文档。
 
 ## 会话步骤
 
 1. 按文首说明处理用例（该起 subagent 就立刻起，然后继续往下做）。
-2. 写或续写 `02-plan.md`。版块按「本次角色」。多种方案当场问用户；问完把 `answer` 写上、`status` 改成 `resolved`，正文写成已经选定的方案。清单可以先有 pending，但本会话结束前不能再留 pending。
-3. 初稿落盘后，对照需求和仓库再核对一遍可行性、范围和契约。还有缺口就继续问，并把结论写进 `02-plan.md` 末尾的「已确认结论」一节。没有缺口就在这一节写明核对过、没有新增问题。
-4. 在同一份 `02-plan.md` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
+2. 写或续写 `{{output_plan}}`。版块按「本次角色」。多种方案当场问用户；问完把 `answer` 写上、`status` 改成 `resolved`，正文写成已经选定的方案。清单可以先有 pending，但本会话结束前不能再留 pending。
+3. 初稿落盘后，对照需求和仓库再核对一遍可行性、范围和契约。还有缺口就继续问，并把结论写进 `{{output_plan}}` 末尾的「已确认结论」一节。没有缺口就在这一节写明核对过、没有新增问题。
+4. 在同一份 `{{output_plan}}` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
 
 ```yaml plan_metadata
 involved_repos:
   - <仓库名>
+delivery_role: backend
+delivery_blocks:
+  - backend
+role_basis: "一句话说明为什么是这个角色"
 ```
 
-5. 请用户确认计划可以定稿。用户明确同意之前，`plan_approval` 保持 `pending`。同意之后在同一份 `02-plan.md` 里写成：
+5. 请用户确认计划可以定稿。用户明确同意之前，`plan_approval` 保持 `pending`。同意之后在同一份 `{{output_plan}}` 里写成：
 
 ```yaml plan_approval
 status: approved

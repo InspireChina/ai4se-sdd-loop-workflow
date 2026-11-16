@@ -41,7 +41,8 @@ nodes:
       - state: change_scope
       - state: affected_modules
 
-  # 一次交互会话：只写 02-plan.md，并在同一份里完成澄清和确认。
+  # 一次交互会话：写带角色后缀的计划（02-plan-backend.md / 02-plan-front.md / 02-plan-all.md），并在同一份里完成澄清和确认。
+  # output 仍是逻辑名，落盘时按计划角色加后缀。
   # 用例由主会话按工具拉起后台 subagent 写。design_test_cases 只提供用例 prompt，不单独跑。
   plan_session:
     name: 计划与澄清

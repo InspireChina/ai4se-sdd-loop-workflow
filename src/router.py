@@ -9,6 +9,7 @@ from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.approval_parser import (
     parse_plan_approval,
     parse_plan_metadata,
+    parse_plan_role,
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
@@ -16,12 +17,8 @@ from .parsers.approval_parser import (
 from .parsers.requirement_parser import parse_requirement_metadata
 from .parsers.test_report_parser import parse_test_passed
 from .parsers.workflow_status_parser import WorkflowStatus, parse_workflow_status_file
-from .phase_gate import (
-    phase_complete,
-    plan_session_complete,
-    requirements_complete,
-    requirements_content_ready,
-)
+from .role_output import find_output
+from .phase_gate import phase_complete, plan_session_complete, requirements_complete
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +57,7 @@ def determine_start_node(
     if not docs_dir.is_dir():
         return "analyze_requirements"
 
-    if not (docs_dir / "03-tasks.md").exists():
+    if find_output(docs_dir, "03-tasks.md") is None:
         plan_tests_start = _resolve_plan_tests_phase_start(
             docs_dir, skip_clarification, auto=auto
         )
@@ -69,8 +66,8 @@ def determine_start_node(
             return plan_tests_start
 
     for filename, fallback_node in RESUME_CHECKPOINTS:
-        path = docs_dir / filename
-        if not path.exists():
+        path = find_output(docs_dir, filename)
+        if path is None:
             continue
 
         start = _resolve_from_file(
@@ -95,21 +92,21 @@ def _resolve_plan_tests_phase_start(
 ) -> str | None:
     """03-tasks 之前：计划会话的续跑入口。"""
     state = _gate_state(skip_clarification=skip_clarification, auto=auto)
-    plan_path = docs_dir / "02-plan.md"
-    tests_path = docs_dir / "02-test-cases.md"
+    plan_path = find_output(docs_dir, "02-plan.md")
+    tests_path = find_output(docs_dir, "02-test-cases.md")
 
     if plan_session_complete(docs_dir, state):
         return "split_tasks"
 
-    if plan_path.exists() or tests_path.exists():
+    if plan_path is not None or tests_path is not None:
         return "plan_session"
 
     return None
 
 
 def is_workflow_complete(docs_dir: Path) -> bool:
-    path = docs_dir / "07-commit.md"
-    if not path.exists():
+    path = find_output(docs_dir, "07-commit.md")
+    if path is None:
         return False
     status = parse_workflow_status_file(path)
     return bool(status and status.status == "completed" and not status.next_node)
@@ -132,30 +129,36 @@ def restore_state_from_docs(
             checklist = parse_clarification_checklist(final_content)
             restored.update(checklist.to_state())
 
-    plan = docs_dir / "02-plan.md"
-    if plan.exists():
+    plan = find_output(docs_dir, "02-plan.md")
+    if plan is not None:
         plan_text = plan.read_text(encoding="utf-8")
         restored.update(parse_plan_approval(plan_text).to_state("plan_approved"))
         present, repos = parse_plan_metadata(plan_text)
         if present:
             restored["involved_repos"] = repos
+        role, blocks, basis = parse_plan_role(plan_text, plan.name)
+        if role != "unknown":
+            restored["delivery_role"] = role
+            restored["delivery_blocks"] = blocks
+            restored["role_basis"] = basis
 
-    tests = docs_dir / "02-test-cases.md"
-    if tests.exists():
+    role = restored.get("delivery_role")
+    tests = find_output(docs_dir, "02-test-cases.md", role)
+    if tests is not None:
         restored.update(
             parse_test_cases_approval(tests.read_text(encoding="utf-8")).to_state(
                 "test_cases_approved"
             )
         )
 
-    tasks = docs_dir / "03-tasks.md"
-    if tasks.exists():
+    tasks = find_output(docs_dir, "03-tasks.md", role)
+    if tasks is not None:
         restored.update(
             parse_tasks_approval(tasks.read_text(encoding="utf-8")).to_state("tasks_approved")
         )
 
-    report = docs_dir / "05-test-report.md"
-    if report.exists():
+    report = find_output(docs_dir, "05-test-report.md", role)
+    if report is not None:
         report_text = report.read_text(encoding="utf-8")
         status = parse_workflow_status_file(report)
         if status is not None and status.test_passed is not None:
@@ -265,8 +268,6 @@ def _infer_from_status_fields(
             return "analyze_requirements"
         if requirements_complete(docs_dir, state):
             return "plan_session"
-        if requirements_content_ready(docs_dir, state):
-            return "analyze_requirements"
         return "analyze_requirements"
 
     if filename == "02-plan.md" or filename == "02-test-cases.md":
@@ -296,11 +297,6 @@ def _infer_without_status(
             return "analyze_requirements"
         if requirements_complete(path.parent, state):
             return "plan_session"
-        if requirements_content_ready(path.parent, state):
-            return "analyze_requirements"
-        metadata = parse_requirement_metadata(content)
-        if metadata.requirement_type and metadata.requirement_type != "unknown":
-            return "analyze_requirements"
         return "analyze_requirements"
 
     if filename in ("02-plan.md", "02-test-cases.md"):

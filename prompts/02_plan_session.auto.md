@@ -1,4 +1,4 @@
-> **运行模式：无人值守（--auto）** — 禁止向用户提问、列举选项或等待回复。按 **`ai-rules` 优先** → 本 prompt → 与需求/现网最一致的方案自己拍板，并写明依据。只写 `02-plan.md`，`plan_approval` 直接写 `approved`。不要写 `02-plan-review.md`。
+> **运行模式：无人值守（--auto）** — 禁止向用户提问、列举选项或等待回复。按 **`ai-rules` 优先** → 本 prompt → 与需求/现网最一致的方案自己拍板，并写明依据。只写 `{{output_plan}}`，`plan_approval` 直接写 `approved`。不要写 `02-plan-review.md`。
 > **测试用例不在本会话里写**。启动说明见文首。不要 review 测试用例。
 
 {{subagent_delegation}}
@@ -16,16 +16,19 @@
 3. 简单至上。计划正文按下面的「计划正文结构」写。多种方案在本会话自己定稿，不要留给别的节点。
 4. 核对架构与模块、接口/API 范围、数据模型与存储、里程碑与实施顺序、技术选型与仓库一致性、风险。不要把实现细节写成决策项。不要比对测试用例。
 
-## 本次角色
+## 本次角色（本节点确定）
+
+需求文档不区分前后端。本节点自己确定只做后端、只做前端，还是两边都做。续跑时若下面已经有角色，沿用，不要改后缀。
 
 {{role_scope}}
 
-`02-plan.md` 最开头、任何 YAML 之前写「角色与版块」，照抄上面的角色、版块、依据。
+识别信号：后端 = `pom.xml` / `go.mod` / `src/main/java` / `application.yml` 等；前端 = `package.json` 含 vue/react、`src/components`、`*.vue` / `*.tsx` 等。仓库两边都有时，再看这次需求实际改哪边。分不清就按 `ai-rules` 和需求自决，写明依据，不要问用户。
 
-- 版块只有「后端」→ 只输出版块 A
-- 版块只有「前端」→ 只输出版块 B
-- 版块是「后端、前端」→ 版块 A、B 都输出
-- 上面是「未识别」→ 按推荐自决一个版块范围，在正文写明假设，清单里记 `resolved`
+- 只做后端：`delivery_role: backend`，文件名后缀 `backend`，只输出版块 A
+- 只做前端：`delivery_role: frontend`，文件名后缀 `front`，只输出版块 B
+- 两边都做：`delivery_role: both`，文件名后缀 `all`，版块 A、B 都输出
+
+计划文件只能是 `{{output_plan}}` 里和角色对应的那一个：`02-plan-backend.md`、`02-plan-front.md` 或 `02-plan-all.md`。不要写不带后缀的 `02-plan.md`。用例文件用同一个后缀。文件最开头写「角色与版块」，和 `plan_metadata` 一致。
 
 ## 写作语言
 
@@ -120,7 +123,7 @@
 
 歧义全部自决后写入 `clarification_checklist`，每条 `status: resolved` 并写上 `answer`（依据）。结束前 `all_resolved: true`，`pending_count: 0`。不要留 `pending`。
 
-核对结论写在 `02-plan.md` 末尾的「已确认结论」，不另写评审文件，也不写 `review_plan_approval`。
+核对结论写在 `{{output_plan}}` 末尾的「已确认结论」，不另写评审文件，也不写 `review_plan_approval`。
 
 ## 材料
 
@@ -141,18 +144,22 @@
 
 ## 产出路径
 
-只写 `{{final_output_path}}`。用例文件 `{{docs_dir}}/02-test-cases.md` 按文首说明处理，本会话不要自己写。
+只写 `{{final_output_path}}`。用例文件 `{{output_test_cases}}` 按文首说明处理，本会话不要自己写。
 
 ## 会话步骤
 
 1. 按文首说明处理用例，然后继续写计划，不要空等。
-2. 写完 `02-plan.md`，歧义全部自决，清单里不留 `pending`。
-3. 对照需求做一轮可行性/范围/契约核对，把结论和已裁决项写进 `02-plan.md` 末尾的「已确认结论」。
-4. 在同一份 `02-plan.md` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
+2. 写完 `{{output_plan}}`，歧义全部自决，清单里不留 `pending`。
+3. 对照需求做一轮可行性/范围/契约核对，把结论和已裁决项写进 `{{output_plan}}` 末尾的「已确认结论」。
+4. 在同一份 `{{output_plan}}` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
 
 ```yaml plan_metadata
 involved_repos:
   - <仓库名>
+delivery_role: backend
+delivery_blocks:
+  - backend
+role_basis: "一句话说明为什么是这个角色"
 ```
 
 5. 在同一份文件里把 `plan_approval.status` 写成 `approved`，`confirmed_at` 用当前时间，`user_note` 写「无人值守按 ai-rules 定稿」。

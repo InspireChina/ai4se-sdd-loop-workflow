@@ -112,12 +112,14 @@ your-project/
 | 节点 | 产出 | 做什么 |
 |------|------|--------|
 | 需求分析 | `01-requirements.md` | 澄清与定稿 |
-| 计划与澄清 | `02-plan.md` | 一次交互会话只写这一份计划：写完、问完、用户确认。会话开场按当前工具拉起后台 subagent 另写 `02-test-cases.md` |
+| 计划与澄清 | `02-plan-backend.md` / `02-plan-front.md` / `02-plan-all.md` | 计划节点确定只做后端、只做前端或两边都做，文件名后缀分别是 `backend`、`front`、`all`。用例文件用同一个后缀 |
 | 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
 | 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
 | 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
 | AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
 | 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
+
+计划及之后的产出都带角色后缀：只做后端是 `-backend`，只做前端是 `-front`，两边都做是 `-all`。例如 `03-tasks-backend.md`。需求文件仍是 `01-requirements.md`。角色在计划节点确定，后面的节点沿用这份结论。
 
 - 人工：`prompts/*.md`，澄清与审批需确认；`--auto` 用 `*.auto.md`，按 `ai-rules` 自决  
 - 测试只在「测试自验证」写；实现节点不写测试  
@@ -128,8 +130,8 @@ your-project/
 
 核心流程只在计划会话里确认 **计划**，**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
 
-- 用例写到 `02-test-cases.md`。正文写完后，AI 才把 `test_cases_approval.status` 写成 `pending`，表示写完了、等人工澄清。没有这个确认块，计划会话不结束。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
-- QA 在自己环境通读 `02-test-cases.md`，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
+- 用例写到与计划相同后缀的文件，例如 `02-test-cases-backend.md`。正文写完后，AI 才把 `test_cases_approval.status` 写成 `pending`，表示写完了、等人工澄清。没有这个确认块，计划会话不结束。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
+- QA 在自己环境通读这份用例，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
 - 该状态**不进核心门禁**：计划确认后进入 `split_tasks` → `implement_code` 都不会等待 QA 把用例改成 `approved`。用例正文本身要先写好，计划会话才会结束。
 - `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。
 - 建议节奏：QA 在 `implement_code` 期间完成用例 review，确保 `verify_tests` 跑的是已确认的用例。
@@ -164,7 +166,7 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 |----------------------|--------------|
 | 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
 | `01-requirements` 已完成，计划未确认或用例未写好 | `plan_session` |
-| `02-plan.md` 已确认且用例正文已在 | `split_tasks` |
+| 带角色后缀的计划文件已确认且用例正文已在 | `split_tasks` |
 | `03-tasks` 已批 | `implement_code` |
 | `04-implementation` 已有 | `verify_tests` |
 | `05-test-report` 已有 | `ai_review` |
@@ -181,7 +183,7 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 
 ## 5. 核心扩展点：`ai-rules`
 
-规则正文不写进节点 prompt。`ai-rules.yaml` 的 `nodes.<节点ID>` 列出该节点要读的 md。生成 `temp-prompts/<节点>.prompt.md` 时，只把这些文件复制到同级 `references/`：公共文件名为 `common_<文件名>.md`，仓库文件名为 `<仓库名>_<文件名>.md`。计划定稿把本次要改的仓库写入 `02-plan.md` 的 `plan_metadata.involved_repos`。计划之后的节点再滤一遍：本节点配了这条规则，并且它属于涉及的仓库，才列进提示词。**改规则时改 `project_docs_dir` 下的源文件**，不必改引擎 `prompts/`。
+规则正文不写进节点 prompt。`ai-rules.yaml` 的 `nodes.<节点ID>` 列出该节点要读的 md。生成 `temp-prompts/<节点>.prompt.md` 时，只把这些文件复制到同级 `references/`：公共文件名为 `common_<文件名>.md`，仓库文件名为 `<仓库名>_<文件名>.md`。计划定稿把本次要改的仓库写入带角色后缀的计划文件的 `plan_metadata.involved_repos`。计划之后的节点再滤一遍：本节点配了这条规则，并且它属于涉及的仓库，才列进提示词。**改规则时改 `project_docs_dir` 下的源文件**，不必改引擎 `prompts/`。
 
 | 目录 | 作用 |
 |------|------|

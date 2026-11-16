@@ -9,7 +9,7 @@
 
 ## 硬性约束（引擎级，不可被扩展 rule 覆盖）
 
-1. **禁止提交文档产出**：文档在团队文档仓库 `{{docs_dir}}`（`project_docs_dir/spec/<需求名>/`）。不得把该目录 `git add` / commit 进业务仓库（含本节点产出 `07-commit.md`）。
+1. **禁止提交文档产出**：文档在团队文档仓库 `{{docs_dir}}`（`project_docs_dir/spec/<需求名>/`）。不得把该目录 `git add` / commit 进业务仓库（含本节点产出 `{{output_commit}}`）。
 2. 提交范围仅限业务代码与相关测试等非 docs 改动；不确定是否属于 docs 时先排除。
 3. **默认不 push**（除非扩展 rule 明确要求）。
 4. 无改动可提交时：写报告说明 nothing to commit，正常结束（勿空 commit）。
@@ -64,7 +64,7 @@ AI Review：
 
 {{role_scope}}
 
-`07-commit.md` 最开头先写「角色与版块」，照抄上面的角色、版块、依据。
+`{{output_commit}}` 最开头先写「角色与版块」，照抄计划结论里的角色、版块、依据。文件名后缀已经写在产出路径里，不要另选。
 
 ## 产出路径
 
