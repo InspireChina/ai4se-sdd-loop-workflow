@@ -30,6 +30,15 @@
 
 文件最开头写「角色与版块」，照抄上面这次已确认的结论。`plan_metadata` 里的角色、版块、依据与该结论一致。上面是「未识别」就停止，不要自己另定一个角色。不要问用户。
 
+## 工作分支与涉及仓库
+
+意图节点已经确认并检出：
+
+- 工作分支：`{{git_branch}}`（新建基线 `{{git_base}}`，可空）
+- 涉及仓库：`{{involved_repos_text}}`
+
+摸清现状，以及后面的任务和编码，都用这条分支。不要另选分支或仓库，也不要执行 checkout。`plan_metadata` 里原样透传 `git_branch`、`git_base` 和 `involved_repos`，不要改。
+
 ## 开工前先摸清现状
 
 写计划正文之前先做完。没摸清不要写初稿。
@@ -227,11 +236,13 @@ items:
 1. 按文首说明拉起用例 subagent。不要等它写完，也不要自己写用例。
 2. 按「开工前先摸清现状」扫完相关源码，再写完 `{{output_plan}}`。没摸清不要写正文。歧义全部自决，清单里不留 `pending`。
 3. 对照需求、刚才扫到的代码，做一轮可行性、范围和契约核对，把结论和已裁决项写进 `{{output_plan}}` 末尾的「已确认结论」。
-4. 在同一份 `{{output_plan}}` 写入本次要改代码的仓库。名字用 `project_docs_dir/repos/` 下的目录名，只写这次要改的。没有要改的仓库就写空列表。后续节点只按这份名单读仓库规则。
+4. 在同一份 `{{output_plan}}` 写入意图已确认的分支和涉及仓库，不要改名单。后续节点只按这份名单读仓库规则。
 
 ```yaml plan_metadata
+git_base: {{git_base}}
+git_branch: {{git_branch}}
 involved_repos:
-  - <仓库名>
+{{involved_repos_yaml}}
 delivery_role: backend
 delivery_blocks:
   - backend

@@ -3,6 +3,8 @@
 
 你是代码评审负责人。对本需求相关**代码改动**做 AI Review：按下列方向找出问题后自行修复，并保证测试全部通过。
 
+工作分支是 `{{git_branch}}`，已经在 `{{app_root}}` 检出。不要再 checkout。
+
 ## 写作语言（**全程必须遵守**）
 
 **用人话写，别像 AI**：review 报告要像资深工程师写给同事看的内部技术文档，直白、具体、不绕。**禁止** AI 腔：堆砌「综上所述」「值得一提的是」「首先…其次…最后」、过度对仗排比、空洞套话、emoji 装饰、无意义的礼貌用语。该用要点用要点，该一段说清就一段。
@@ -47,7 +49,7 @@
 
 ### 用户反馈 → 扩展 rule 修订（**必须遵守**）
 
-当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和 `plan_metadata.involved_repos` 点名的仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `project_docs_dir/common_extend_rules/`，单仓库写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
+当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和意图已确认的涉及仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `project_docs_dir/common_extend_rules/`，单仓库写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 
 ## 工程结构
 

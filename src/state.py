@@ -33,7 +33,7 @@ class DevWorkflowState(TypedDict, total=False):
     delivery_role: str  # backend | frontend | both | unknown
     delivery_blocks: list[str]  # backend / frontend
     role_basis: str
-    # None：还没从计划加载。list（可为空）：已写入，后续节点只读这份
+    # None：还没确认。list（可为空）：意图已确认，后续节点只读这份
     involved_repos: list[str] | None
     requirement_metadata: Annotated[dict, merge_dict]
     # 需求澄清 loop
@@ -49,5 +49,9 @@ class DevWorkflowState(TypedDict, total=False):
     test_cases_approved: bool
     tasks_approved: bool
     resume_from_node: str
+    # 意图确认的工作分支；新建时的基线（可空，由用户或 extend_rules 指定）。
+    git_branch: str
+    git_base: str
+    work_branch_blocked: bool
     test_passed: bool
     last_error: Optional[str]

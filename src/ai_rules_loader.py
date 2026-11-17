@@ -170,9 +170,9 @@ def materialize_rule_references(
 
 
 def restrict_rules_to_involved(node_id: str, plan_metadata_present: bool) -> bool:
-    """计划之后的节点：仓库规则还得属于 involved_repos。计划节点只按本节点配置列候选。"""
+    """意图已确认涉及仓库后：计划及之后的节点，仓库规则还得属于 involved_repos。"""
     if node_id == PLAN_NODE_ID:
-        return False
+        return plan_metadata_present
     if node_id in POST_PLAN_NODE_IDS:
         return True
     return node_id == "design_test_cases" and plan_metadata_present
@@ -181,13 +181,13 @@ def restrict_rules_to_involved(node_id: str, plan_metadata_present: bool) -> boo
 def rule_catalog_mode(node_id: str, plan_metadata_present: bool) -> str:
     """按节点决定仓库规则目录怎么列。
 
-    discover：计划节点，先判定涉及仓库再打开对应文件，并写入 plan_metadata。
-    scoped：计划已写明涉及仓库，只列这些仓库。
-    unset：计划还没有 plan_metadata，后续节点只列公共规则。
+    discover：计划节点且意图还没写下涉及仓库时的兜底。
+    scoped：意图/计划已写明涉及仓库，只列这些仓库。
+    unset：还没有涉及仓库名单，后续节点只列公共规则。
     common_only：计划之前的节点，只列公共规则。
     """
     if node_id == PLAN_NODE_ID:
-        return "discover"
+        return "scoped" if plan_metadata_present else "discover"
     if node_id in POST_PLAN_NODE_IDS:
         return "scoped" if plan_metadata_present else "unset"
     if node_id == "design_test_cases" and plan_metadata_present:
@@ -222,7 +222,7 @@ def build_ai_rules_prompt(
         listed = "、".join(involved) if involved else "（无）"
         lines.extend(
             [
-                f"计划 `plan_metadata.involved_repos` 已写明本次涉及的仓库：{listed}。",
+                f"本次涉及的仓库已确认：{listed}。",
                 "下面只列出本节点配置、且属于这些仓库的规则。只打开这些文件。",
                 "",
             ]

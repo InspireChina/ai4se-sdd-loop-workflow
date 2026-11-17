@@ -29,6 +29,7 @@ from ..ai_rules_loader import (
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
     parse_intent_approval,
+    parse_intent_metadata,
     parse_plan_approval,
     parse_plan_metadata,
     parse_plan_role,
@@ -36,6 +37,7 @@ from ..parsers.approval_parser import (
     parse_tasks_approval,
     parse_test_cases_approval,
 )
+from ..work_branch import WorkBranchError, normalize_work_branch
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
@@ -65,7 +67,7 @@ EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 把握规则�
 def _hydrate_involved_repos(
     docs_dir: Path, state: DevWorkflowState
 ) -> dict[str, list[str]]:
-    """state 里已有涉及仓库就不动。没有则从本次角色的计划读一次。"""
+    """state 里已有涉及仓库（含意图确认的空列表）就不动。没有则从本次角色的计划读一次。"""
     if state.get("involved_repos") is not None:
         return {}
     role = str(state.get("delivery_role") or "")
@@ -457,14 +459,19 @@ class NodeRunner:
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
                 if node_id == "plan_session":
-                    present, repos = parse_plan_metadata(final_content)
-                    if present:
-                        updates["involved_repos"] = repos
-                    parsed, blocks, basis = parse_plan_role(final_content, final_path.name)
-                    if parsed != "unknown":
-                        updates["delivery_role"] = parsed
-                        updates["delivery_blocks"] = blocks
-                        updates["role_basis"] = basis
+                    # 角色 / 涉及仓库 / 分支以意图确认为准，只透传，不用计划文件回写覆盖。
+                    if state.get("involved_repos") is None:
+                        present, repos = parse_plan_metadata(final_content)
+                        if present:
+                            updates["involved_repos"] = repos
+                    if str(state.get("delivery_role") or "") in ("", "unknown"):
+                        parsed, blocks, basis = parse_plan_role(
+                            final_content, final_path.name
+                        )
+                        if parsed != "unknown":
+                            updates["delivery_role"] = parsed
+                            updates["delivery_blocks"] = blocks
+                            updates["role_basis"] = basis
 
                 checklist = parse_clarification_checklist(final_content)
                 if checklist.items:
@@ -551,14 +558,30 @@ class NodeRunner:
                 "last_error": result.message or "意图未确认",
             }
 
-        role, blocks, basis = parse_plan_role(text)
-        logger.info("意图已确认：%s（本次不落盘）", role)
+        meta = parse_intent_metadata(text)
+        try:
+            branch = normalize_work_branch(meta.git_branch)
+        except WorkBranchError as exc:
+            return {
+                "current_node": node_cfg.node_id,
+                "intent_approved": False,
+                "last_error": str(exc),
+            }
+        logger.info(
+            "意图已确认：role=%s repos=%s branch=%s（本次不落盘）",
+            meta.delivery_role,
+            meta.involved_repos,
+            branch,
+        )
         return {
             "current_node": node_cfg.node_id,
             "completed_nodes": [node_cfg.node_id],
-            "delivery_role": role,
-            "delivery_blocks": blocks,
-            "role_basis": basis,
+            "delivery_role": meta.delivery_role,
+            "delivery_blocks": list(meta.delivery_blocks or []),
+            "role_basis": meta.role_basis,
+            "involved_repos": list(meta.involved_repos or []),
+            "git_branch": branch,
+            "git_base": meta.git_base,
             "intent_approved": True,
             "last_error": None,
         }
@@ -833,6 +856,10 @@ class NodeRunner:
             "output_commit": output_hint(
                 docs_dir, "07-commit.md", str(state.get("delivery_role") or "")
             ),
+            "git_branch": str(state.get("git_branch") or ""),
+            "git_base": str(state.get("git_base") or ""),
+            "requirement_slug": str(state.get("requirement_slug") or docs_dir.name),
+            "requirement_type": str(state.get("requirement_type") or ""),
             "role_scope": format_role_scope(
                 str(state.get("delivery_role") or ""),
                 list(state.get("delivery_blocks") or []),
@@ -882,10 +909,12 @@ class NodeRunner:
             context.update(meta.to_context())
 
         app_root_setting = state.get("app_root") or self.workflow_config.app_root
+        app_root = resolve_app_root(self.project_root, app_root_setting)
         project_docs = resolve_project_docs_dir(
-            resolve_app_root(self.project_root, app_root_setting),
+            app_root,
             self.workflow_config.project_docs_dir,
         )
+        context.update(_intent_and_repo_context(state))
         involved_repos = state.get("involved_repos")
         metadata_present = involved_repos is not None
         references = materialize_rule_references(
@@ -973,11 +1002,36 @@ def _intent_result_path(docs_dir: Path) -> Path:
     return docs_dir / "temp-prompts" / "identify_intent.result.md"
 
 
+def _intent_and_repo_context(state: DevWorkflowState) -> dict[str, str]:
+    """计划提示词用的已确认分支与仓库列表。分支名不由引擎推荐。"""
+    repos = state.get("involved_repos")
+    if repos is None:
+        repos_text = "（尚未确认）"
+        repos_yaml = "  []"
+    elif not repos:
+        repos_text = "（无）"
+        repos_yaml = "  []"
+    else:
+        repos_text = "、".join(str(item) for item in repos)
+        repos_yaml = "\n".join(f"  - {item}" for item in repos)
+
+    return {
+        "involved_repos_text": repos_text,
+        "involved_repos_yaml": repos_yaml,
+        "git_branch": str(state.get("git_branch") or ""),
+        "git_base": str(state.get("git_base") or ""),
+    }
+
+
 def _confirmed_intent_text(content: str) -> str:
-    role, _blocks, _basis = parse_plan_role(content)
-    if role not in ("backend", "frontend", "both"):
-        return ""
     if not parse_intent_approval(content).is_approved:
+        return ""
+    meta = parse_intent_metadata(content)
+    if meta.delivery_role not in ("backend", "frontend", "both"):
+        return ""
+    if meta.involved_repos is None:
+        return ""
+    if not meta.git_branch.strip():
         return ""
     return content
 

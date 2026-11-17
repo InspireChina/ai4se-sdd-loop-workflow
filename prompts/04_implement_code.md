@@ -2,6 +2,8 @@
 
 你是一名全栈工程师。请根据任务清单，在项目中**完成代码实现**。
 
+工作分支是 `{{git_branch}}`，已经在 `{{app_root}}` 检出。不要再 checkout。
+
 
 ## 写作语言（**全程必须遵守**）
 
@@ -73,7 +75,7 @@
 
 当用户在本会话中**明确提出反馈/修正意见**（针对项目规范、约定、分层、复用、测试策略等；单纯「确认 / 继续 / 没问题」不算）时：
 
-1. **按需读取**：只打开上面「项目定制约束」里列出的文件。计划 `plan_metadata.involved_repos` 没点名的仓库不要读。要改规则时写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
+1. **按需读取**：只打开上面「项目定制约束」里列出的文件。意图已确认的涉及仓库以外不要读。要改规则时写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 2. **归属判断**：判断反馈应归入哪一个 rule 文件，并简要说明依据。
 3. **先找冲突，再改（禁止一味追加）**：
    - 对照用户要求与目标 rule **现有条款**，标出冲突、重复、过时或相反的表述；

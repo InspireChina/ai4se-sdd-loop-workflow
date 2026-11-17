@@ -28,6 +28,12 @@ from .router import (
     resume_node,
 )
 from .state import DevWorkflowState
+from .work_branch import (
+    WorkBranchError,
+    checkout_work_branch,
+    load_recorded_branch,
+    normalize_work_branch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +54,14 @@ class DevWorkflow:
         return self.node_runner.run_node("analyze_requirements", state)
 
     def identify_intent(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("identify_intent", state)
+        """确认角色、涉及仓库、工作分支；确认后检出分支再继续。"""
+        result = self.node_runner.run_node("identify_intent", state)
+        if not result.get("intent_approved"):
+            return result
+        prepared = self._prepare_work_branch({**state, **result}, announce=True)
+        merged = {**result, **prepared}
+        merged["current_node"] = "identify_intent"
+        return merged
 
     def plan_session(self, state: DevWorkflowState) -> DevWorkflowState:
         """一次交互会话写计划并完成澄清。用例由该工具自己的后台 subagent 写。"""
@@ -57,7 +70,16 @@ class DevWorkflow:
             logger.info("计划已确认且用例已就绪，跳过计划会话")
             return {"current_node": "plan_session"}
 
+        prepared = self._prepare_work_branch(state, announce=False)
+        if prepared.get("work_branch_blocked"):
+            prepared["current_node"] = "plan_session"
+            return prepared
+        state = {**state, **prepared}
+
         merged = self.node_runner.run_node("plan_session", state)
+        merged["git_branch"] = prepared.get("git_branch", state.get("git_branch", ""))
+        merged["git_base"] = prepared.get("git_base", state.get("git_base", ""))
+        merged["work_branch_blocked"] = False
         errors: list[str] = []
         if merged.get("last_error"):
             errors.append(str(merged["last_error"]))
@@ -99,19 +121,74 @@ class DevWorkflow:
         return result
 
     def split_tasks(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("split_tasks", state)
+        return self._run_on_work_branch("split_tasks", state)
 
     def implement_code(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("implement_code", state)
+        return self._run_on_work_branch("implement_code", state)
 
     def verify_tests(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("verify_tests", state)
+        return self._run_on_work_branch("verify_tests", state)
 
     def ai_review(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("ai_review", state)
+        return self._run_on_work_branch("ai_review", state)
 
     def commit_code(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("commit_code", state)
+        return self._run_on_work_branch("commit_code", state)
+
+    def _run_on_work_branch(self, node_id: str, state: DevWorkflowState) -> DevWorkflowState:
+        prepared = self._prepare_work_branch(state)
+        if prepared.get("work_branch_blocked"):
+            prepared["current_node"] = node_id
+            return prepared
+        merged = self.node_runner.run_node(node_id, {**state, **prepared})
+        merged["git_branch"] = prepared.get("git_branch", state.get("git_branch", ""))
+        merged["git_base"] = prepared.get("git_base", state.get("git_base", ""))
+        merged["work_branch_blocked"] = False
+        return merged
+
+    def _prepare_work_branch(
+        self, state: DevWorkflowState, *, announce: bool = False
+    ) -> DevWorkflowState:
+        docs_dir = self._resolve_docs_path(state)
+        app_root = self._resolve_app_root(state)
+        role = str(state.get("delivery_role") or "")
+        try:
+            recorded = str(state.get("git_branch") or "").strip() or load_recorded_branch(
+                docs_dir, role
+            )
+            if not recorded:
+                raise WorkBranchError(
+                    "还没有确认工作分支。请在意图识别里指定分支（或在 extend_rules 约定）。"
+                )
+            branch = normalize_work_branch(recorded)
+            base = str(state.get("git_base") or "").strip()
+            action = checkout_work_branch(app_root, branch, base=base)
+        except WorkBranchError as exc:
+            print(f"\n{exc}\n")
+            logger.error("%s", exc)
+            return {
+                "git_branch": "",
+                "git_base": "",
+                "work_branch_blocked": True,
+                "last_error": str(exc),
+            }
+
+        if announce or action != "current":
+            if action == "created":
+                from_base = f"从 {base} " if base else "从当前提交"
+                note = f"已{from_base}新建并检出 {branch}。"
+            elif action == "switched":
+                note = f"已检出工作分支 {branch}。"
+            else:
+                note = f"工作分支 {branch}。"
+            print(f"\n{note}后面的计划、任务和编码都在这条分支上。\n")
+        logger.info("工作分支 %s（基线=%s，%s）", branch, base or "-", action)
+        return {
+            "git_branch": branch,
+            "git_base": base,
+            "work_branch_blocked": False,
+            "last_error": None,
+        }
 
     def _route_from_start(self, state: DevWorkflowState) -> str:
         return state.get("resume_from_node") or "analyze_requirements"
@@ -123,9 +200,15 @@ class DevWorkflow:
         return END
 
     def _route_after_intent(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
         docs_dir = self._resolve_docs_path(state)
         role = str(state.get("delivery_role") or "")
         if role not in ("backend", "frontend", "both") or not state.get("intent_approved"):
+            return END
+        if not str(state.get("git_branch") or "").strip():
+            return END
+        if state.get("involved_repos") is None:
             return END
         if is_workflow_complete(docs_dir, role=role):
             logger.info("Workflow 已完成（本次角色的 07-commit.md status=completed）")
@@ -136,16 +219,35 @@ class DevWorkflow:
         return nxt
 
     def _route_after_plan_session(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
         docs_dir = self._resolve_docs_path(state)
         if plan_session_complete(docs_dir, state):
             return "split_tasks"
         return END
 
     def _route_after_split_tasks(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
         docs_dir = self._resolve_docs_path(state)
         if phase_complete(docs_dir, "split_tasks", state):
             return "implement_code"
         return END
+
+    def _route_after_implement(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
+        return "verify_tests"
+
+    def _route_after_verify(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
+        return "ai_review"
+
+    def _route_after_review(self, state: DevWorkflowState) -> str:
+        if state.get("work_branch_blocked"):
+            return END
+        return "commit_code"
 
     def _resolve_app_root(self, state: DevWorkflowState | None = None) -> Path:
         if state and state.get("app_root"):
@@ -227,9 +329,30 @@ class DevWorkflow:
                 END: END,
             },
         )
-        workflow.add_edge("implement_code", "verify_tests")
-        workflow.add_edge("verify_tests", "ai_review")
-        workflow.add_edge("ai_review", "commit_code")
+        workflow.add_conditional_edges(
+            "implement_code",
+            self._route_after_implement,
+            {
+                "verify_tests": "verify_tests",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "verify_tests",
+            self._route_after_verify,
+            {
+                "ai_review": "ai_review",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "ai_review",
+            self._route_after_review,
+            {
+                "commit_code": "commit_code",
+                END: END,
+            },
+        )
         workflow.add_edge("commit_code", END)
 
         return workflow.compile()
@@ -300,6 +423,9 @@ class DevWorkflow:
             "plan_approved": False,
             "test_cases_approved": False,
             "tasks_approved": False,
+            "git_branch": "",
+            "git_base": "",
+            "work_branch_blocked": False,
             "test_passed": False,
             "last_error": None,
         }

@@ -78,8 +78,63 @@ def parse_plan_metadata(content: str) -> tuple[bool, list[str]]:
     return True, names
 
 
+def parse_plan_git_branch(content: str) -> str:
+    """读取计划里已定的工作分支。没有就返回空字符串。"""
+    raw = _extract_yaml_block(content, "plan_metadata")
+    if raw is None:
+        return ""
+    return str(raw.get("git_branch") or "").strip()
+
+
 def parse_intent_approval(content: str) -> Approval:
     return parse_approval(content, "intent_approval")
+
+
+@dataclass
+class IntentMetadata:
+    delivery_role: str = "unknown"
+    delivery_blocks: list[str] | None = None
+    role_basis: str = ""
+    involved_repos: list[str] | None = None
+    git_branch: str = ""
+    git_base: str = ""
+
+    def __post_init__(self) -> None:
+        if self.delivery_blocks is None:
+            self.delivery_blocks = []
+
+
+def parse_intent_metadata(content: str) -> IntentMetadata:
+    """读取意图确认里的角色、涉及仓库和工作分支。"""
+    raw = _extract_yaml_block(content, "intent_metadata") or {}
+    fields = role_fields(
+        raw.get("delivery_role"),
+        raw.get("delivery_blocks"),
+        raw.get("role_basis"),
+    )
+    repos_raw = raw.get("involved_repos")
+    repos: list[str] | None
+    if repos_raw is None and "involved_repos" not in raw:
+        repos = None
+    else:
+        if isinstance(repos_raw, str):
+            repos_raw = [repos_raw]
+        if not isinstance(repos_raw, list):
+            repos = []
+        else:
+            repos = []
+            for item in repos_raw:
+                name = str(item).strip()
+                if name and name not in repos:
+                    repos.append(name)
+    return IntentMetadata(
+        delivery_role=fields["delivery_role"],
+        delivery_blocks=list(fields["delivery_blocks"]),
+        role_basis=fields["role_basis"],
+        involved_repos=repos,
+        git_branch=str(raw.get("git_branch") or "").strip(),
+        git_base=str(raw.get("git_base") or "").strip(),
+    )
 
 
 def parse_plan_role(content: str, filename: str = "") -> tuple[str, list[str], str]:

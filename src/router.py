@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .parsers.approval_parser import (
     parse_plan_approval,
+    parse_plan_git_branch,
     parse_plan_metadata,
     parse_requirement_approval,
     parse_tasks_approval,
@@ -111,6 +112,9 @@ def restore_state_from_docs(
             present, repos = parse_plan_metadata(plan_text)
             if present:
                 restored["involved_repos"] = repos
+            branch = parse_plan_git_branch(plan_text)
+            if branch:
+                restored["git_branch"] = branch
 
     active = str(restored.get("delivery_role") or (role if role in TRACK_ROLES else ""))
     if active in TRACK_ROLES:
