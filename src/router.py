@@ -1,42 +1,35 @@
-"""启动时读取 docs 产出，决定 workflow 从哪个节点继续。"""
+"""启动时先进入意图识别。角色确认后，只读这一角色的计划、任务和代码，决定从哪继续。
+
+另一角色的计划、任务和代码文件不参与本次路由。意图不落盘，每次启动重新确认。
+"""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
-from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.approval_parser import (
     parse_plan_approval,
     parse_plan_metadata,
-    parse_plan_role,
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
 )
+from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
 from .parsers.test_report_parser import parse_test_passed
-from .parsers.workflow_status_parser import WorkflowStatus, parse_workflow_status_file
-from .role_output import find_output
+from .parsers.workflow_status_parser import parse_workflow_status_file
 from .phase_gate import phase_complete, plan_session_complete, requirements_complete
+from .role_output import blocks_for_role, find_output
 
 logger = logging.getLogger(__name__)
 
-# 产出文件检查顺序：越靠前表示流程越靠后
-RESUME_CHECKPOINTS: list[tuple[str, str | None]] = [
-    ("07-commit.md", None),
-    ("06-ai-review.md", "commit_code"),
-    ("05-test-report.md", "ai_review"),
-    ("04-implementation.md", "verify_tests"),
-    ("03-tasks.md", "implement_code"),
-    ("02-test-cases.md", "plan_session"),
-    ("02-plan.md", "plan_session"),
-    ("01-requirements.md", "plan_session"),
-]
+TRACK_ROLES = ("backend", "frontend", "both")
 
 ROUTABLE_NODES = frozenset(
     {
         "analyze_requirements",
+        "identify_intent",
         "plan_session",
         "split_tasks",
         "implement_code",
@@ -46,244 +39,133 @@ ROUTABLE_NODES = frozenset(
     }
 )
 
-def _gate_state(*, auto: bool = False) -> dict:
-    return {"auto": auto}
+_CODE_LADDER = (
+    ("04-implementation.md", "implement_code", "verify_tests"),
+    ("05-test-report.md", "verify_tests", "ai_review"),
+    ("06-ai-review.md", "ai_review", "commit_code"),
+    ("07-commit.md", "commit_code", ""),
+)
+
+
+def _state(role: str, *, auto: bool = False) -> dict:
+    return {
+        "auto": auto,
+        "delivery_role": role if role in TRACK_ROLES else "unknown",
+        "delivery_blocks": blocks_for_role(role) if role in TRACK_ROLES else [],
+    }
+
+
+def resume_node(docs_dir: Path, role: str, *, auto: bool = False) -> str:
+    """角色已经在本次运行里确认之后，找这一角色第一个还没完成的节点。"""
+    state = _state(role, auto=auto)
+    if not requirements_complete(docs_dir, state):
+        return "analyze_requirements"
+    if role not in TRACK_ROLES:
+        return "identify_intent"
+    if not plan_session_complete(docs_dir, state):
+        return "plan_session"
+    if not phase_complete(docs_dir, "split_tasks", state):
+        return "split_tasks"
+    return _code_resume(docs_dir, role)
 
 
 def determine_start_node(docs_dir: Path, *, auto: bool = False) -> str:
-    """根据 docs 目录已有 md 决定启动节点（仅启动时调用一次）。"""
-    if not docs_dir.is_dir():
+    """需求未完成时从需求开始。需求已完成时每次都先做意图识别。"""
+    if not docs_dir.is_dir() or not requirements_complete(docs_dir, {"auto": auto}):
+        logger.info("续跑：需求未完成 → analyze_requirements")
         return "analyze_requirements"
-
-    if find_output(docs_dir, "03-tasks.md") is None:
-        plan_tests_start = _resolve_plan_tests_phase_start(docs_dir, auto=auto)
-        if plan_tests_start:
-            logger.info("续跑：plan/test 阶段 → 从节点 %s 开始", plan_tests_start)
-            return plan_tests_start
-
-    for filename, fallback_node in RESUME_CHECKPOINTS:
-        path = find_output(docs_dir, filename)
-        if path is None:
-            continue
-
-        start = _resolve_from_file(
-            path, filename, auto=auto
-        )
-        if start:
-            logger.info("续跑：基于 %s → 从节点 %s 开始", filename, start)
-            return start
-
-        if fallback_node:
-            adjusted = _adjust_fallback(
-                filename, fallback_node, path.parent, auto=auto
-            )
-            logger.info("续跑：发现 %s（无状态表）→ 从 %s 开始", filename, adjusted)
-            return adjusted
-
-    return "analyze_requirements"
+    logger.info("续跑：先确认本次角色，再按该角色已有产出继续")
+    return "identify_intent"
 
 
-def _resolve_plan_tests_phase_start(docs_dir: Path, *, auto: bool = False) -> str | None:
-    """03-tasks 之前：计划会话的续跑入口。"""
-    state = _gate_state(auto=auto)
-    plan_path = find_output(docs_dir, "02-plan.md")
-    tests_path = find_output(docs_dir, "02-test-cases.md")
-
-    if plan_session_complete(docs_dir, state):
-        return "split_tasks"
-
-    if plan_path is not None or tests_path is not None:
-        return "plan_session"
-
-    return None
-
-
-def is_workflow_complete(docs_dir: Path) -> bool:
-    path = find_output(docs_dir, "07-commit.md")
+def is_workflow_complete(docs_dir: Path, *, role: str) -> bool:
+    """只看本次已确认角色的 code/07-commit。另一角色提交完成不算本次结束。"""
+    if role not in TRACK_ROLES:
+        return False
+    path = find_output(docs_dir, "07-commit.md", role)
     if path is None:
         return False
     status = parse_workflow_status_file(path)
     return bool(status and status.status == "completed" and not status.next_node)
 
 
-def restore_state_from_docs(docs_dir: Path, *, auto: bool = False) -> dict:
-    """从 md 恢复澄清清单、元数据、确认状态等 state 字段。"""
+def restore_state_from_docs(
+    docs_dir: Path, *, role: str = "", auto: bool = False
+) -> dict:
+    """恢复需求。角色要等本次意图确认后才有；传入角色时再恢复该角色的计划和后续状态。"""
     restored: dict = {}
 
-    final = docs_dir / "01-requirements.md"
-    if final.exists():
+    final = find_output(docs_dir, "01-requirements.md")
+    if final is not None:
         final_content = final.read_text(encoding="utf-8")
         checklist = parse_clarification_checklist(final_content)
         restored.update(checklist.to_state())
         restored.update(parse_requirement_metadata(final_content).to_state_updates())
         restored.update(parse_requirement_approval(final_content).to_state())
-        if not restored.get("clarification_questions"):
-            checklist = parse_clarification_checklist(final_content)
-            restored.update(checklist.to_state())
 
-    plan = find_output(docs_dir, "02-plan.md")
-    if plan is not None:
-        plan_text = plan.read_text(encoding="utf-8")
-        restored.update(parse_plan_approval(plan_text).to_state("plan_approved"))
-        present, repos = parse_plan_metadata(plan_text)
-        if present:
-            restored["involved_repos"] = repos
-        role, blocks, basis = parse_plan_role(plan_text, plan.name)
-        if role != "unknown":
-            restored["delivery_role"] = role
-            restored["delivery_blocks"] = blocks
-            restored["role_basis"] = basis
+    if role in TRACK_ROLES:
+        plan = find_output(docs_dir, "02-plan.md", role)
+        if plan is not None:
+            plan_text = plan.read_text(encoding="utf-8")
+            restored.update(parse_plan_approval(plan_text).to_state("plan_approved"))
+            present, repos = parse_plan_metadata(plan_text)
+            if present:
+                restored["involved_repos"] = repos
 
-    role = restored.get("delivery_role")
-    tests = find_output(docs_dir, "02-test-cases.md", role)
-    if tests is not None:
-        restored.update(
-            parse_test_cases_approval(tests.read_text(encoding="utf-8")).to_state(
-                "test_cases_approved"
+    active = str(restored.get("delivery_role") or (role if role in TRACK_ROLES else ""))
+    if active in TRACK_ROLES:
+        tests = find_output(docs_dir, "02-test-cases.md")
+        if tests is not None:
+            restored.update(
+                parse_test_cases_approval(tests.read_text(encoding="utf-8")).to_state(
+                    "test_cases_approved"
+                )
             )
-        )
 
-    tasks = find_output(docs_dir, "03-tasks.md", role)
-    if tasks is not None:
-        restored.update(
-            parse_tasks_approval(tasks.read_text(encoding="utf-8")).to_state("tasks_approved")
-        )
+        tasks = find_output(docs_dir, "03-tasks.md", active)
+        if tasks is not None:
+            restored.update(
+                parse_tasks_approval(tasks.read_text(encoding="utf-8")).to_state(
+                    "tasks_approved"
+                )
+            )
 
-    report = find_output(docs_dir, "05-test-report.md", role)
-    if report is not None:
-        report_text = report.read_text(encoding="utf-8")
-        status = parse_workflow_status_file(report)
-        if status is not None and status.test_passed is not None:
-            restored["test_passed"] = status.test_passed
-        else:
-            restored["test_passed"] = parse_test_passed(report_text)
+        report = find_output(docs_dir, "05-test-report.md", active)
+        if report is not None:
+            report_text = report.read_text(encoding="utf-8")
+            status = parse_workflow_status_file(report)
+            if status is not None and status.test_passed is not None:
+                restored["test_passed"] = status.test_passed
+            else:
+                restored["test_passed"] = parse_test_passed(report_text)
 
     if auto:
         restored["auto"] = True
-
     return restored
 
 
-def _adjust_fallback(
-    filename: str,
-    fallback_node: str,
-    docs_dir: Path,
-    *,
-    auto: bool = False,
-) -> str:
-    state = _gate_state(auto=auto)
-    if filename == "01-requirements.md":
-        if not requirements_complete(docs_dir, state):
-            return "analyze_requirements"
-    if filename in ("02-plan.md", "02-test-cases.md"):
-        return "plan_session"
-    if filename == "03-tasks.md":
-        if not phase_complete(docs_dir, "split_tasks", state):
-            return "split_tasks"
-    return fallback_node
+def _code_resume(docs_dir: Path, role: str) -> str:
+    found: tuple[Path, str, str] | None = None
+    for filename, current, nxt in _CODE_LADDER:
+        path = find_output(docs_dir, filename, role)
+        if path is not None:
+            found = (path, current, nxt)
+    if found is None:
+        return "implement_code"
 
-
-def _resolve_from_file(path: Path, filename: str, *, auto: bool = False) -> str | None:
+    path, current, nxt = found
     status = parse_workflow_status_file(path)
-    if status:
-        return _resolve_from_status(
-            status,
-            filename,
-            docs_dir=path.parent,
-            auto=auto,
-        )
-
-    return _infer_without_status(
-        path, filename, auto=auto
-    )
-
-
-def _resolve_from_status(
-    status: WorkflowStatus,
-    filename: str,
-    *,
-    docs_dir: Path,
-    auto: bool = False,
-) -> str | None:
-    if status.status in ("in_progress", "failed") and status.node in ROUTABLE_NODES:
-        return status.node
-
-    state = _gate_state(auto=auto)
-    if status.next_node in ROUTABLE_NODES:
-        if filename == "01-requirements.md" and status.next_node == "plan_session":
-            if not requirements_complete(docs_dir, state):
-                return "analyze_requirements"
-        if filename == "03-tasks.md" and status.next_node == "implement_code":
-            if not phase_complete(docs_dir, "split_tasks", state):
-                return "split_tasks"
-        return status.next_node
-
-    if status.status == "completed" and not status.next_node and filename == "07-commit.md":
-        return None
-    # 旧产出：ai_review 已完成且无 next_node → 进入新增的 commit_code
     if (
-        status.status == "completed"
+        path.name.startswith("07-commit")
+        and status
+        and status.status == "completed"
         and not status.next_node
-        and filename == "06-ai-review.md"
     ):
         return "commit_code"
-
-    return _infer_from_status_fields(
-        status,
-        filename,
-        docs_dir=docs_dir,
-        auto=auto,
-    )
-
-
-def _infer_from_status_fields(
-    status: WorkflowStatus,
-    filename: str,
-    *,
-    docs_dir: Path,
-    auto: bool = False,
-) -> str | None:
-    state = _gate_state(auto=auto)
-    skip = auto
-
-    if filename == "01-requirements.md":
-        if status.pending_count > 0 and not skip:
-            return "analyze_requirements"
-        if requirements_complete(docs_dir, state):
-            return "plan_session"
-        return "analyze_requirements"
-
-    if filename == "02-plan.md" or filename == "02-test-cases.md":
-        return _resolve_plan_tests_phase_start(docs_dir, auto=auto)
-
-    if filename == "03-tasks.md":
-        if phase_complete(docs_dir, "split_tasks", state):
-            return "implement_code"
-        return "split_tasks"
-
-    return None
-
-
-def _infer_without_status(path: Path, filename: str, *, auto: bool = False) -> str | None:
-    content = path.read_text(encoding="utf-8")
-    checklist = parse_clarification_checklist(content)
-    pending = len(checklist.pending_items())
-    state = _gate_state(auto=auto)
-    skip = auto
-
-    if filename == "01-requirements.md":
-        if pending > 0 and not skip:
-            return "analyze_requirements"
-        if requirements_complete(path.parent, state):
-            return "plan_session"
-        return "analyze_requirements"
-
-    if filename in ("02-plan.md", "02-test-cases.md"):
-        return _resolve_plan_tests_phase_start(path.parent, auto=auto)
-
-    if filename == "03-tasks.md":
-        if phase_complete(path.parent, "split_tasks", state):
-            return "implement_code"
-        return "split_tasks"
-
-    return None
+    if status and status.status in ("in_progress", "failed") and status.node in ROUTABLE_NODES:
+        return status.node
+    if status and status.next_node in ROUTABLE_NODES:
+        return status.next_node
+    if status and status.status == "completed" and nxt:
+        return nxt
+    return current

@@ -77,7 +77,11 @@ your-project/
 <团队共享目录>/
   <项目名>/                          # project_docs_dir，一个共享目录下可有多个项目
     origin_requirements/             原始需求
-    spec/<需求名>/                   01-requirements.md … 07-commit.md
+    spec/<需求名>/
+      requirements/01-requirements.md
+      plan/02-plan-<后缀>.md、02-test-cases.md
+      task/03-tasks-<后缀>.md
+      code/04-implementation-<后缀>.md、05-test-report-<后缀>.md、06-ai-review-<后缀>.md、07-commit-<后缀>.md
     common_extend_rules/             公共扩展规则，与 repos 平级
     repos/<仓库名>/extend_rules/     该仓库的扩展规则，做到这个仓库时再读
 ```
@@ -105,20 +109,21 @@ your-project/
 ## 3. 有哪些节点
 
 ```text
-需求 → 计划会话（交互写计划并澄清；主会话按工具拉起后台 subagent 写用例）→ 任务拆分 → 实现 → 测试 → AI Review → 提交
+需求 → 意图识别 → 计划会话（交互写计划并澄清；主会话按工具拉起后台 subagent 写用例）→ 任务拆分 → 实现 → 测试 → AI Review → 提交
 ```
 
 | 节点 | 产出 | 做什么 |
 |------|------|--------|
-| 需求分析 | `01-requirements.md` | 澄清与定稿 |
-| 计划与澄清 | `02-plan-backend.md` / `02-plan-front.md` / `02-plan-all.md` | 计划节点确定只做后端、只做前端或两边都做，文件名后缀分别是 `backend`、`front`、`all`。用例文件用同一个后缀 |
-| 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
-| 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
-| 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
-| AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
-| 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
+| 需求分析 | `requirements/01-requirements.md` | 澄清与定稿。前后端共用这一份 |
+| 意图识别 | 不落盘 | 每次启动都扫当前业务根，判断只做后端、只做前端或两边都做，用户确认后只留在本次运行里。确认后再按该角色已有的计划、任务和代码续跑 |
+| 计划与澄清 | `plan/02-plan-backend.md` / `02-plan-front.md` / `02-plan-all.md` | 沿用意图结论写计划。用例报告是 `plan/02-test-cases.md`，不分角色 |
+| 任务拆分 | `task/03-tasks-<后缀>.md` | 任务 + API 详细设计。只写本次角色的文件 |
+| 代码实现 | `code/04-implementation-<后缀>.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
+| 测试自验证 | `code/05-test-report-<后缀>.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
+| AI 代码评审 | `code/06-ai-review-<后缀>.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
+| 提交代码 | `code/07-commit-<后缀>.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
 
-计划及之后的产出都带角色后缀：只做后端是 `-backend`，只做前端是 `-front`，两边都做是 `-all`。例如 `03-tasks-backend.md`。需求文件仍是 `01-requirements.md`。用例报告仍是 `02-test-cases.md`，不分角色。角色在计划节点确定，后面的节点沿用这份结论。
+文件名后缀不变：只做后端是 `-backend`，只做前端是 `-front`，两边都做是 `-all`。需求文件和用例报告不带后缀。前后端各写各的计划、任务和 `code/` 下的文件，互不覆盖。角色每次启动重新确认，只在这次运行里往后传，不写意图文件。
 
 - 人工：`prompts/*.md`，澄清与审批需确认；`--auto` 用 `*.auto.md`，按 `ai-rules` 自决  
 - 测试只在「测试自验证」写；实现节点不写测试  
@@ -129,7 +134,7 @@ your-project/
 
 核心流程只在计划会话里确认 **计划**，**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
 
-- 用例不分前后端。报告写到 `02-test-cases.md`，用例文件放在同目录的 `attachments/`。扩展 rule 没规定形式时写 markdown；规定了形式也放在这个目录，并在报告里写明位置。写完后 AI 把 `test_cases_approval.status` 写成 `pending`，表示已经生成。没有这个写完标记，计划会话不结束。生成过程没有澄清阶段。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
+- 用例不分前后端。报告写到 `plan/02-test-cases.md`，用例文件放在同目录的 `attachments/`。扩展 rule 没规定形式时写 markdown；规定了形式也放在这个目录，并在报告里写明位置。写完后 AI 把 `test_cases_approval.status` 写成 `pending`，表示已经生成。没有这个写完标记，计划会话不结束。生成过程没有澄清阶段。Cursor、Claude Code、Codex、omp 都由主会话里的后台 subagent 写，启动方式按工具不同。
 - QA 在自己环境通读这份用例，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
 - 该状态**不进核心门禁**：计划确认后进入 `split_tasks` → `implement_code` 都不会等待 QA 把用例改成 `approved`。用例正文本身要先写好，计划会话才会结束。
 - `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。
@@ -147,7 +152,7 @@ your-project/
 |------|------|
 | 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `sddl start` |
 | 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `sddl start`（可带原 `--file`）；**不要**加 `--fresh` |
-| 整条链路已完成（存在完成态的 `07-commit.md`） | 再 `sddl start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
+| 整条链路已完成（本次确认角色的 `code/07-commit-<后缀>.md` 已完成） | 再 `sddl start` 仍会先确认角色；确认后发现该角色已提交完成就结束。另一角色不受影响。要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
 
 ```bash
 # 续跑（推荐始终带上 --name，与首次一致；tool 用业务配置）
@@ -159,18 +164,19 @@ sddl start --file "/path/to/prd.md" --name login --fresh
 
 ### 依据什么定位断点
 
-启动时按「流程越靠后的产出优先」检查，并结合状态表里的 `next_node`、门禁是否通过（内容就绪 + 需审批节点已 `approved`）决定入口，例如：
+需求还没完成时从需求分析开始。需求已经完成时，每次启动都先做意图识别，由用户确认这次的角色。确认之后只扫描这一角色自己的目录和后缀，从它还没完成的节点接着跑。另一角色的文件不参与这次续跑。意图结论不写文件，下次启动重新确认。
 
-| 已有关键产出（示意） | 通常从哪继续 |
+| 已有关键产出（本次确认的角色） | 通常从哪继续 |
 |----------------------|--------------|
-| 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
-| `01-requirements` 已完成，计划未确认或用例未写好 | `plan_session` |
-| 带角色后缀的计划文件已确认且用例正文已在 | `split_tasks` |
-| `03-tasks` 已批 | `implement_code` |
-| `04-implementation` 已有 | `verify_tests` |
-| `05-test-report` 已有 | `ai_review` |
-| `06-ai-review` 已有 | `commit_code` |
-| `07-commit` 已 completed 且无下一节点 | 整单结束，无需续跑 |
+| 需求未批完 | `analyze_requirements` |
+| 需求已完成 | `identify_intent`，确认后再看下面各项 |
+| 计划未确认或用例未写好 | `plan_session` |
+| 带本次角色后缀的计划已确认且用例正文已在 | `split_tasks` |
+| `task/03-tasks-<后缀>` 已批 | `implement_code` |
+| `code/04-implementation-<后缀>` 已有 | `verify_tests` |
+| `code/05-test-report-<后缀>` 已有 | `ai_review` |
+| `code/06-ai-review-<后缀>` 已有 | `commit_code` |
+| `code/07-commit-<后缀>` 已 completed 且无下一节点 | 本次角色结束；换一个角色再确认则走那一条线 |
 
 要点：
 

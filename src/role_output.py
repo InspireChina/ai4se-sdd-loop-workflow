@@ -26,6 +26,23 @@ ROLE_SCOPED_OUTPUTS = frozenset(
     }
 )
 
+# 需求目录下按阶段分目录。编码、测试、评审、提交共用 code/。
+OUTPUT_STAGE_DIR = {
+    "01-requirements.md": "requirements",
+    "02-plan.md": "plan",
+    "02-test-cases.md": "plan",
+    "03-tasks.md": "task",
+    "04-implementation.md": "code",
+    "05-test-report.md": "code",
+    "06-ai-review.md": "code",
+    "07-commit.md": "code",
+}
+
+
+def stage_dir(docs_dir: Path, logical: str) -> Path:
+    name = OUTPUT_STAGE_DIR.get(logical, "")
+    return docs_dir / name if name else docs_dir
+
 
 def role_from_filename(name: str) -> str | None:
     for suffix, role in SUFFIX_ROLE.items():
@@ -57,41 +74,41 @@ def candidate_names(logical: str) -> list[str]:
 
 
 def find_output(docs_dir: Path, logical: str, role: str | None = None) -> Path | None:
-    """已有产出。角色已知时只认对应后缀；未知时三个后缀里取最新的一份。"""
+    """已有产出。角色已知时只认该角色的后缀，不读取另一角色的文件。"""
+    folder = stage_dir(docs_dir, logical)
     if logical not in ROLE_SCOPED_OUTPUTS:
-        path = docs_dir / logical
+        path = folder / logical
         return path if path.is_file() else None
 
     if role and role not in ("", "unknown"):
-        path = docs_dir / suffixed_name(logical, role)
+        path = folder / suffixed_name(logical, role)
         return path if path.is_file() else None
+    return None
 
-    found = [docs_dir / name for name in candidate_names(logical) if (docs_dir / name).is_file()]
-    if not found:
-        return None
-    if len(found) == 1:
-        return found[0]
-    return max(found, key=lambda path: path.stat().st_mtime)
+
+def list_role_outputs(docs_dir: Path, logical: str) -> list[Path]:
+    """该阶段下已有的各角色文件。"""
+    folder = stage_dir(docs_dir, logical)
+    return [folder / name for name in candidate_names(logical) if (folder / name).is_file()]
 
 
 def write_output_path(docs_dir: Path, logical: str, role: str | None) -> Path:
-    """本次要写的路径。角色未定且磁盘上已有带后缀的文件时，沿用那一份。"""
+    """本次要写的路径。角色未定时不借用另一角色已经写好的文件。"""
+    folder = stage_dir(docs_dir, logical)
     if logical not in ROLE_SCOPED_OUTPUTS:
-        return docs_dir / logical
+        return folder / logical
     if role and role not in ("", "unknown"):
-        return docs_dir / suffixed_name(logical, role)
-    existing = find_output(docs_dir, logical)
-    if existing:
-        return existing
-    return docs_dir / logical
+        return folder / suffixed_name(logical, role)
+    return folder / logical
 
 
 def output_hint(docs_dir: Path, logical: str, role: str | None) -> str:
     """写进提示词的路径。角色未定时列出三个候选。"""
     if logical not in ROLE_SCOPED_OUTPUTS or (role and role not in ("", "unknown")):
         return str(write_output_path(docs_dir, logical, role))
+    folder = stage_dir(docs_dir, logical)
     stem = logical[:-3]
-    return "、".join(str(docs_dir / f"{stem}-{suffix}.md") for suffix in ("backend", "front", "all"))
+    return "、".join(str(folder / f"{stem}-{suffix}.md") for suffix in ("backend", "front", "all"))
 
 
 ROLE_ALIASES = {

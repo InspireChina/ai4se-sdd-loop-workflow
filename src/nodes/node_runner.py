@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from ..ai_rules_loader import (
 )
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
+    parse_intent_approval,
     parse_plan_approval,
     parse_plan_metadata,
     parse_plan_role,
@@ -63,10 +65,13 @@ EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 把握规则�
 def _hydrate_involved_repos(
     docs_dir: Path, state: DevWorkflowState
 ) -> dict[str, list[str]]:
-    """state 里已有涉及仓库就不动。没有则从 02-plan.md 读一次，交给调用方写回 state。"""
+    """state 里已有涉及仓库就不动。没有则从本次角色的计划读一次。"""
     if state.get("involved_repos") is not None:
         return {}
-    plan_path = find_output(docs_dir, "02-plan.md")
+    role = str(state.get("delivery_role") or "")
+    if role in ("", "unknown"):
+        return {}
+    plan_path = find_output(docs_dir, "02-plan.md", role)
     if plan_path is None:
         return {}
     present, repos = parse_plan_metadata(plan_path.read_text(encoding="utf-8"))
@@ -78,23 +83,9 @@ def _hydrate_involved_repos(
 def _hydrate_delivery_role(
     docs_dir: Path, state: DevWorkflowState
 ) -> dict[str, object]:
-    """state 里已有计划角色就不动。没有则从计划文件读一次。"""
-    role = str(state.get("delivery_role") or "")
-    if role and role != "unknown":
-        return {}
-    plan_path = find_output(docs_dir, "02-plan.md")
-    if plan_path is None:
-        return {}
-    parsed, blocks, basis = parse_plan_role(
-        plan_path.read_text(encoding="utf-8"), plan_path.name
-    )
-    if parsed == "unknown":
-        return {}
-    return {
-        "delivery_role": parsed,
-        "delivery_blocks": blocks,
-        "role_basis": basis,
-    }
+    """角色只从意图节点写入的 state 来，不从别的角色的计划里取。"""
+    del docs_dir, state
+    return {}
 
 
 def _format_rule_list(rules: list, label: str) -> list[str]:
@@ -143,6 +134,7 @@ _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
 _APP_ROOT_NODES = frozenset(
     {
         "analyze_requirements",
+        "identify_intent",
         "plan_session",
         "design_test_cases",
         "implement_code",
@@ -180,6 +172,8 @@ class NodeRunner:
             prompt_rel,
             "无人值守" if auto else "人工介入",
         )
+        if node_id == "identify_intent":
+            return self._run_identify_intent(node_cfg, docs_dir, prompt)
 
         tool = get_ai_tool(node_cfg.tool)
         agent_cwd = self._agent_cwd(node_id)
@@ -282,7 +276,7 @@ class NodeRunner:
             "completed_nodes": [node_id],
         }
         updates.update(hydrated)
-        updates.update(self._parse_node_outputs(node_id, content, docs_dir))
+        updates.update(self._parse_node_outputs(node_id, content, docs_dir, state, output_path))
 
         merged_state = {**state, **updates}
         workflow_status = self._build_workflow_status(
@@ -425,14 +419,30 @@ class NodeRunner:
         output_path.write_text(upsert_workflow_status(body, status), encoding="utf-8")
 
     def _parse_node_outputs(
-        self, node_id: str, content: str, docs_dir: Path
+        self,
+        node_id: str,
+        content: str,
+        docs_dir: Path,
+        state: DevWorkflowState,
+        output_path: Path | None = None,
     ) -> DevWorkflowState:
         updates: DevWorkflowState = {}
 
         cfg = get_phase_config(node_id)
+        role = str(state.get("delivery_role") or "")
+        if output_path is not None and role_from_filename(output_path.name):
+            role = role_from_filename(output_path.name) or role
         if cfg:
-            final_path = find_output(docs_dir, cfg.final_file)
-            if final_path is not None:
+            final_path = (
+                output_path
+                if output_path is not None and output_path.exists()
+                else find_output(
+                    docs_dir,
+                    cfg.final_file,
+                    role if role and role != "unknown" else None,
+                )
+            )
+            if final_path is not None and final_path.exists():
                 final_content = final_path.read_text(encoding="utf-8")
                 if node_id == "analyze_requirements":
                     metadata = parse_requirement_metadata(final_content)
@@ -450,9 +460,9 @@ class NodeRunner:
                     present, repos = parse_plan_metadata(final_content)
                     if present:
                         updates["involved_repos"] = repos
-                    role, blocks, basis = parse_plan_role(final_content, final_path.name)
-                    if role != "unknown":
-                        updates["delivery_role"] = role
+                    parsed, blocks, basis = parse_plan_role(final_content, final_path.name)
+                    if parsed != "unknown":
+                        updates["delivery_role"] = parsed
                         updates["delivery_blocks"] = blocks
                         updates["role_basis"] = basis
 
@@ -461,7 +471,12 @@ class NodeRunner:
                     updates.update(checklist.to_state())
 
         if node_id == "verify_tests":
-            report_path = find_output(docs_dir, "05-test-report.md")
+            report_role = str(updates.get("delivery_role") or state.get("delivery_role") or "")
+            report_path = find_output(
+                docs_dir,
+                "05-test-report.md",
+                report_role if report_role and report_role != "unknown" else None,
+            )
             report = (
                 report_path.read_text(encoding="utf-8")
                 if report_path is not None
@@ -470,6 +485,83 @@ class NodeRunner:
             updates["test_passed"] = parse_test_passed(report)
 
         return updates
+
+    def _run_identify_intent(
+        self,
+        node_cfg: NodeConfig,
+        docs_dir: Path,
+        prompt: str,
+    ) -> DevWorkflowState:
+        """扫仓库并请用户确认。结论只写入本次 state，临时文件读完即删。"""
+        result_path = _intent_result_path(docs_dir)
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        if result_path.exists():
+            result_path.unlink()
+        started = time.time()
+
+        tool = get_ai_tool(node_cfg.tool)
+        agent_cwd = self._agent_cwd(node_cfg.node_id)
+        configured_model = (node_cfg.model or "").strip()
+        effective_model = "" if node_cfg.tool == "echo" and configured_model else configured_model
+        interactive = node_cfg.mode == "interactive"
+        logger.info(
+            "进入节点 [%s] (%s) tool=%s model=%s mode=%s",
+            node_cfg.name,
+            node_cfg.node_id,
+            node_cfg.tool,
+            effective_model or "(tool默认)",
+            "interactive" if interactive else "headless",
+        )
+        if interactive and not sys.stdin.isatty():
+            logger.warning("当前非 TTY 终端，交互模式可能无法正常输入")
+
+        def confirmed() -> bool:
+            return bool(_read_confirmed_intent(result_path, started))
+
+        if interactive:
+            result = tool.run_interactive(
+                prompt=prompt,
+                cwd=str(agent_cwd),
+                completion_check=confirmed,
+                node_id=node_cfg.node_id,
+                prompt_dir=str(docs_dir),
+                model=effective_model or None,
+            )
+            if not confirmed():
+                logger.warning("节点 [%s] 交互已结束，但本次角色还未确认", node_cfg.name)
+        else:
+            result = tool.run(
+                prompt=prompt,
+                cwd=str(agent_cwd),
+                node_id=node_cfg.node_id,
+                prompt_dir=str(docs_dir),
+                model=effective_model or None,
+            )
+
+        text = _read_confirmed_intent(result_path, started)
+        if not text and result.content.strip():
+            text = _confirmed_intent_text(result.content)
+        if result_path.exists():
+            result_path.unlink()
+
+        if not text:
+            return {
+                "current_node": node_cfg.node_id,
+                "intent_approved": False,
+                "last_error": result.message or "意图未确认",
+            }
+
+        role, blocks, basis = parse_plan_role(text)
+        logger.info("意图已确认：%s（本次不落盘）", role)
+        return {
+            "current_node": node_cfg.node_id,
+            "completed_nodes": [node_cfg.node_id],
+            "delivery_role": role,
+            "delivery_blocks": blocks,
+            "role_basis": basis,
+            "intent_approved": True,
+            "last_error": None,
+        }
 
     def _build_completion_check(
         self,
@@ -554,6 +646,7 @@ class NodeRunner:
 
         phase_labels = {
             "analyze_requirements": "requirements",
+            "identify_intent": "intent",
             "design_test_cases": "test_cases",
             "plan_session": "plan",
             "split_tasks": "tasks",
@@ -587,7 +680,7 @@ class NodeRunner:
         if auto_mode and node_id == "analyze_requirements" and phase_complete(
             docs_dir, "analyze_requirements", state
         ):
-            next_node = "plan_session"
+            next_node = "identify_intent"
 
         test_passed = None
         if node_id == "verify_tests":
@@ -648,7 +741,7 @@ class NodeRunner:
             "node_outputs": {node_id: rel},
             "completed_nodes": [node_id],
         }
-        updates.update(self._parse_node_outputs(node_id, content, docs_dir))
+        updates.update(self._parse_node_outputs(node_id, content, docs_dir, state, output_path))
         merged = {**state, **updates}
         status = self._build_workflow_status(
             node_id, merged, docs_dir, success=True
@@ -753,6 +846,7 @@ class NodeRunner:
             context["final_output_path"] = output_hint(docs_dir, cfg.final_file, role)
         else:
             context["final_output_path"] = str(docs_dir / "01-requirements.md")
+        context["intent_result_path"] = str(_intent_result_path(docs_dir))
 
         for inp in node_cfg.inputs:
             if inp.kind == "state":
@@ -874,6 +968,31 @@ class NodeRunner:
             header += f"> 备注: {result.message}\n"
         header += "\n---\n\n"
         return header + content
+
+def _intent_result_path(docs_dir: Path) -> Path:
+    return docs_dir / "temp-prompts" / "identify_intent.result.md"
+
+
+def _confirmed_intent_text(content: str) -> str:
+    role, _blocks, _basis = parse_plan_role(content)
+    if role not in ("backend", "frontend", "both"):
+        return ""
+    if not parse_intent_approval(content).is_approved:
+        return ""
+    return content
+
+
+def _read_confirmed_intent(path: Path, started: float) -> str:
+    if not path.is_file():
+        return ""
+    if path.stat().st_mtime + 1 < started:
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return _confirmed_intent_text(text)
+
 
 def _can_create_output(logical: str, path: Path) -> bool:
     """角色文件必须带后缀。角色还没定时，不要另写一份不带后缀的文件。"""

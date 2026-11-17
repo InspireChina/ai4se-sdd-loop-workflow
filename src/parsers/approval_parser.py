@@ -78,9 +78,17 @@ def parse_plan_metadata(content: str) -> tuple[bool, list[str]]:
     return True, names
 
 
+def parse_intent_approval(content: str) -> Approval:
+    return parse_approval(content, "intent_approval")
+
+
 def parse_plan_role(content: str, filename: str = "") -> tuple[str, list[str], str]:
-    """计划里的前后端角色。元数据优先，没有时用文件名后缀。"""
-    raw = _extract_yaml_block(content, "plan_metadata") or {}
+    """意图或计划里的前后端角色。元数据优先，没有时用文件名后缀。"""
+    raw = (
+        _extract_yaml_block(content, "intent_metadata")
+        or _extract_yaml_block(content, "plan_metadata")
+        or {}
+    )
     fields = role_fields(
         raw.get("delivery_role"),
         raw.get("delivery_blocks"),

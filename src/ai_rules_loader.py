@@ -213,7 +213,7 @@ def build_ai_rules_prompt(
             [
                 "下面只列出本节点配置的规则。先判断本次要改哪些仓库，再只打开这些仓库的文件。候选不要一次读完。",
                 "`common_` 开头是公共规则，遵守项目约束前读取。",
-                "定稿时把涉及仓库写入本次计划文件（`02-plan-backend.md`、`02-plan-front.md` 或 `02-plan-all.md`）的 `plan_metadata.involved_repos`，名字用 `project_docs_dir/repos/` 下的目录名。",
+                "定稿时把涉及仓库写入本次计划文件（`plan/02-plan-backend.md`、`plan/02-plan-front.md` 或 `plan/02-plan-all.md`）的 `plan_metadata.involved_repos`，名字用 `project_docs_dir/repos/` 下的目录名。",
                 "没有要改的仓库就写空列表。后续节点只在本节点也配置了该规则、且仓库在这份名单里时才读取。",
                 "",
             ]

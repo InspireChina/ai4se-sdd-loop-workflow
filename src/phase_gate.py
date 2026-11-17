@@ -32,17 +32,23 @@ class PhaseConfig:
 
 
 def delivery_role_from_docs(docs_dir: Path, state: DevWorkflowState) -> str:
-    """后续节点用的角色。state 里已有就用 state，否则读计划文件。"""
+    """本次角色以这次运行确认后写入的 state 为准。"""
     role = str(state.get("delivery_role") or "")
     if role and role != "unknown":
         return role
-    plan = find_output(docs_dir, "02-plan.md")
-    if not plan:
-        return ""
-    parsed, _blocks, _basis = parse_plan_role(
-        plan.read_text(encoding="utf-8"), plan.name
-    )
-    return "" if parsed == "unknown" else parsed
+    return ""
+
+
+def _stage_file(docs_dir: Path, node_id: str, state: DevWorkflowState) -> Path | None:
+    cfg = PHASE_CONFIGS.get(node_id)
+    if not cfg:
+        return None
+    role = delivery_role_from_docs(docs_dir, state)
+    lookup = None if cfg.final_file not in {
+        "02-plan.md",
+        "03-tasks.md",
+    } else (role or None)
+    return find_output(docs_dir, cfg.final_file, lookup)
 
 
 def resolve_doc_path(
@@ -55,22 +61,13 @@ def resolve_doc_path(
     return write_output_path(docs_dir, doc_key, lookup)
 
 
-def _stage_file(docs_dir: Path, node_id: str, state: DevWorkflowState) -> Path | None:
-    cfg = PHASE_CONFIGS.get(node_id)
-    if not cfg:
-        return None
-    role = delivery_role_from_docs(docs_dir, state)
-    lookup = None if cfg.final_file == "02-plan.md" else (role or None)
-    return find_output(docs_dir, cfg.final_file, lookup)
-
-
 PHASE_CONFIGS: dict[str, PhaseConfig] = {
     "analyze_requirements": PhaseConfig(
         node_id="analyze_requirements",
         final_file="01-requirements.md",
         approval_block="requirement_approval",
         approval_state_key="requirement_approved",
-        next_node="plan_session",
+        next_node="identify_intent",
         min_body_chars=200,
     ),
     "design_test_cases": PhaseConfig(
@@ -162,7 +159,7 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
 
 
 def _role_file_ready(_docs_dir: Path, node_id: str, final_path: Path, content: str) -> bool:
-    """计划文件必须带角色后缀，并且和计划角色一致。用例报告不分角色。"""
+    """计划文件必须带角色后缀，并且和文件里的角色一致。"""
     if node_id == "plan_session":
         file_role = role_from_filename(final_path.name)
         meta_role, _blocks, _basis = parse_plan_role(content, final_path.name)

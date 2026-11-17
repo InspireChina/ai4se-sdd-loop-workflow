@@ -6,7 +6,11 @@
 # <团队共享目录>/
 #   <项目名>/                            # project_docs_dir
 #     origin_requirements/               原始需求
-#     spec/<需求名>/                     workflow 产出
+#     spec/<需求名>/
+#       requirements/                  需求
+#       plan/                          计划、用例
+#       task/                          任务
+#       code/                          实现、测试、评审、提交
 #     common_extend_rules/               公共扩展规则，与 repos 平级；按需读取
 #     repos/<仓库名>/extend_rules/       该仓库的扩展规则；做该仓库时再读
 project_docs_dir: ""
@@ -41,6 +45,9 @@ defaults:
 
 nodes:
   analyze_requirements:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  identify_intent:
     recommendation_threshold: 0.8
     extend_rules: []
   plan_session:

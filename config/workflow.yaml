@@ -27,6 +27,17 @@ nodes:
       - state: requirement
       - doc: 01-requirements.md
 
+  identify_intent:
+    name: 意图识别
+    tool: claude_code
+    mode: interactive
+    prompt: prompts/02_identify_intent.md
+    prompt_auto: prompts/02_identify_intent.auto.md
+    # 意图不落盘。输出字段仅满足节点配置，运行时不写这个文件。
+    output: intent.md
+    inputs:
+      - doc: 01-requirements.md
+
   design_test_cases:
     name: 设计测试用例
     tool: claude_code

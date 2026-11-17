@@ -29,7 +29,7 @@ class DevWorkflowState(TypedDict, total=False):
     change_scope: str
     affected_modules: list[str]
     compatibility_risk: str  # low | medium | high | unknown
-    # 计划节点确定的前后端角色，后续节点只读这份状态
+    # 本次启动时意图识别确认的角色，只留在这次运行里，不写文件。前后端各走各的计划、任务和代码。
     delivery_role: str  # backend | frontend | both | unknown
     delivery_blocks: list[str]  # backend / frontend
     role_basis: str
@@ -44,6 +44,7 @@ class DevWorkflowState(TypedDict, total=False):
     user_clarifications: str
     auto: bool  # --auto 无人值守：禁止向用户提问，门禁在内容就绪后自动通过
     requirement_approved: bool
+    intent_approved: bool
     plan_approved: bool
     test_cases_approved: bool
     tasks_approved: bool

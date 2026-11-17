@@ -21,7 +21,12 @@ from .requirement_dir import (
     resolve_requirement_docs_dir,
     save_original_requirement,
 )
-from .router import determine_start_node, is_workflow_complete, restore_state_from_docs
+from .router import (
+    determine_start_node,
+    is_workflow_complete,
+    restore_state_from_docs,
+    resume_node,
+)
 from .state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,9 @@ class DevWorkflow:
 
     def analyze_requirements(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("analyze_requirements", state)
+
+    def identify_intent(self, state: DevWorkflowState) -> DevWorkflowState:
+        return self.node_runner.run_node("identify_intent", state)
 
     def plan_session(self, state: DevWorkflowState) -> DevWorkflowState:
         """一次交互会话写计划并完成澄清。用例由该工具自己的后台 subagent 写。"""
@@ -111,8 +119,21 @@ class DevWorkflow:
     def _route_after_analyze(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
         if requirements_complete(docs_dir, state):
-            return "plan_session"
+            return "identify_intent"
         return END
+
+    def _route_after_intent(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        role = str(state.get("delivery_role") or "")
+        if role not in ("backend", "frontend", "both") or not state.get("intent_approved"):
+            return END
+        if is_workflow_complete(docs_dir, role=role):
+            logger.info("Workflow 已完成（本次角色的 07-commit.md status=completed）")
+            return END
+        nxt = resume_node(docs_dir, role, auto=bool(state.get("auto")))
+        if nxt in ("analyze_requirements", "identify_intent"):
+            return END
+        return nxt
 
     def _route_after_plan_session(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
@@ -146,6 +167,7 @@ class DevWorkflow:
 
         workflow.add_node("route_next", self.route_next)
         workflow.add_node("analyze_requirements", self.analyze_requirements)
+        workflow.add_node("identify_intent", self.identify_intent)
         workflow.add_node("plan_session", self.plan_session)
         workflow.add_node("split_tasks", self.split_tasks)
         workflow.add_node("implement_code", self.implement_code)
@@ -159,6 +181,7 @@ class DevWorkflow:
             self._route_from_start,
             {
                 "analyze_requirements": "analyze_requirements",
+                "identify_intent": "identify_intent",
                 "plan_session": "plan_session",
                 "split_tasks": "split_tasks",
                 "implement_code": "implement_code",
@@ -171,7 +194,20 @@ class DevWorkflow:
             "analyze_requirements",
             self._route_after_analyze,
             {
+                "identify_intent": "identify_intent",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "identify_intent",
+            self._route_after_intent,
+            {
                 "plan_session": "plan_session",
+                "split_tasks": "split_tasks",
+                "implement_code": "implement_code",
+                "verify_tests": "verify_tests",
+                "ai_review": "ai_review",
+                "commit_code": "commit_code",
                 END: END,
             },
         )
@@ -224,26 +260,12 @@ class DevWorkflow:
         docs_path = resolve_docs_path(self._content_base(), resolved_docs_dir)
 
         if fresh and docs_path.exists():
-            for path in docs_path.glob("*.md"):
-                if path.name != "00-requirement.md":
-                    path.unlink()
+            for path in docs_path.rglob("*.md"):
+                if path.name == "00-requirement.md":
+                    continue
+                path.unlink()
 
         original_path = save_original_requirement(docs_path, requirement)
-
-        if is_workflow_complete(docs_path):
-            logger.info("Workflow 已完成（07-commit.md status=completed）")
-            done_state: DevWorkflowState = {
-                "requirement": requirement,
-                "app_root": str(app_root),
-                "docs_dir": resolved_docs_dir,
-                "requirement_slug": requirement_slug,
-                "clarification_resolved": True,
-                "resume_from_node": "",
-                "auto": auto,
-            }
-            done_state.update(restore_state_from_docs(docs_path, auto=auto))
-            return done_state
-
         start_node = determine_start_node(docs_path, auto=auto)
 
         initial: DevWorkflowState = {
@@ -274,15 +296,14 @@ class DevWorkflow:
             "user_clarifications": "",
             "auto": auto,
             "requirement_approved": False,
+            "intent_approved": False,
             "plan_approved": False,
             "test_cases_approved": False,
             "tasks_approved": False,
             "test_passed": False,
             "last_error": None,
         }
-        initial.update(
-            restore_state_from_docs(docs_path, auto=auto)
-        )
+        initial.update(restore_state_from_docs(docs_path, auto=auto))
         return self._graph.invoke(initial)
 
 
