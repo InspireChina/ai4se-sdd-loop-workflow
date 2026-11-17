@@ -53,6 +53,8 @@
 
 ## 产出路径
 
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
+
 `{{output_path}}`
 
 ---
@@ -111,3 +113,13 @@
 ```
 
 结果列只允许 `pass` / `skip` / `fail` / `blocked`。
+
+报告正文与结果表写完后，在同一文件末尾写入定稿标记（引擎据此自动进入下一节点）：
+
+```yaml test_report_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "无人值守阶段 5 定稿完成"
+```
+
+未写或仍为 `pending` 时本节点不结束。用例报告里的 `test_cases_approval` 与此无关，不阻塞定稿。

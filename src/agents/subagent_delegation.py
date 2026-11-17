@@ -11,7 +11,13 @@ from pathlib import Path
 from .prompt_file import launch_read_prompt
 
 
-def testcase_delegation(tool_name: str, prompt_file: Path, output_label: str) -> str:
+def testcase_delegation(
+    tool_name: str,
+    prompt_file: Path,
+    output_label: str,
+    *,
+    prompt_display: str | None = None,
+) -> str:
     """按主会话工具生成「立刻拉起一个用例 subagent」的说明。"""
     key = tool_name.strip()
     if key == "omp":
@@ -22,7 +28,7 @@ def testcase_delegation(tool_name: str, prompt_file: Path, output_label: str) ->
         raise ValueError(
             f"工具 {tool_name} 没有用例 subagent 启动说明。已接入: {known}"
         )
-    return builder(prompt_file, output_label)
+    return builder(prompt_file, output_label, prompt_display=prompt_display)
 
 
 def testcase_ready_note(output_label: str) -> str:
@@ -32,20 +38,24 @@ def testcase_ready_note(output_label: str) -> str:
 """
 
 
-def _shared_rules(prompt_file: Path, output_label: str) -> str:
-    launch = launch_read_prompt(prompt_file)
+def _shared_rules(
+    prompt_file: Path, output_label: str, *, prompt_display: str | None = None
+) -> str:
+    launch = launch_read_prompt(prompt_file, display_path=prompt_display)
     return f"""prompt 逐字使用下面这段，不要改写成你自己的用例，也不要把本会话的对话历史交给它：
 
 {launch}
 
 子代理的当前目录与本会话相同，是业务项目根。不要改到引擎仓库。
-用例不分前后端，写成一份整体。报告写到 `{output_label}`。用例正文放在报告同目录的 `attachments/`，报告里写明位置。
+用例不分前后端，写成一份整体。报告写到 `{output_label}`。用例正文放在报告同目录的 `attachments/`，报告里写明相对路径（如 `attachments/test-cases.md`），禁止本机绝对路径。
 你禁止自己写用例。子代理在后台写文件的同时，你继续完成本会话的计划工作。
 在把计划文件里的 `plan_approval` 写成 `approved` 之前，确认用例报告里已经有 `test_cases_approval.status: pending`（人已经确认过则是 `approved`）。没有这个写完标记表示用例还在写，不要收尾。
 """
 
 
-def _cursor(prompt_file: Path, output_label: str) -> str:
+def _cursor(
+    prompt_file: Path, output_label: str, *, prompt_display: str | None = None
+) -> str:
     return f"""## 启动动作（拉起用例）
 
 立刻用 Task 工具启动且只启动一个后台 subagent，再继续写计划。不要等它结束才开始写计划。用例不分前后端。
@@ -56,10 +66,12 @@ Task 参数必须是：
 - model: `inherit`
 - description: `design test cases`
 
-{_shared_rules(prompt_file, output_label)}"""
+{_shared_rules(prompt_file, output_label, prompt_display=prompt_display)}"""
 
 
-def _claude_code(prompt_file: Path, output_label: str) -> str:
+def _claude_code(
+    prompt_file: Path, output_label: str, *, prompt_display: str | None = None
+) -> str:
     return f"""## 启动动作（拉起用例）
 
 立刻调用 Task，只调用一次，让它在后台跑，再继续写计划。不要等它写完才开始写计划。用例不分前后端。若当前工具列表里没有 Task、只有 Agent，就调用 Agent。
@@ -70,10 +82,12 @@ def _claude_code(prompt_file: Path, output_label: str) -> str:
 - model: `inherit`
 - description: `design test cases`
 
-{_shared_rules(prompt_file, output_label)}"""
+{_shared_rules(prompt_file, output_label, prompt_display=prompt_display)}"""
 
 
-def _codex(prompt_file: Path, output_label: str) -> str:
+def _codex(
+    prompt_file: Path, output_label: str, *, prompt_display: str | None = None
+) -> str:
     return f"""## 启动动作（拉起用例）
 
 立刻调用 spawn_agent，只调用一次，再继续写计划。不要等它写完才开始写计划。用例不分前后端。子代理还在写文件时，不要调用 interrupt_agent 或 close_agent，也不要另开 shell 去等文件出现。
@@ -83,10 +97,12 @@ def _codex(prompt_file: Path, output_label: str) -> str:
 - task_name: `design test cases`
 - message: 下面这段原文
 
-{_shared_rules(prompt_file, output_label)}"""
+{_shared_rules(prompt_file, output_label, prompt_display=prompt_display)}"""
 
 
-def _oh_my_pi(prompt_file: Path, output_label: str) -> str:
+def _oh_my_pi(
+    prompt_file: Path, output_label: str, *, prompt_display: str | None = None
+) -> str:
     return f"""## 启动动作（拉起用例）
 
 立刻调用 task，只调用一次，再继续写计划。不要等它写完才开始写计划。用例不分前后端。
@@ -100,7 +116,7 @@ def _oh_my_pi(prompt_file: Path, output_label: str) -> str:
   - task: 下面这段原文
 - 不要传 isolated。传了之后子任务只交回补丁，不会把文件写到目标路径。
 
-{_shared_rules(prompt_file, output_label)}"""
+{_shared_rules(prompt_file, output_label, prompt_display=prompt_display)}"""
 
 
 _BUILDERS = {

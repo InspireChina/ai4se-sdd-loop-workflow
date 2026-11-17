@@ -19,6 +19,7 @@ from .parsers.approval_parser import (
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
+    parse_test_report_approval,
 )
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
@@ -221,6 +222,11 @@ def restore_state_from_docs(
         report = find_output(docs_dir, "05-test-report.md", active)
         if report is not None:
             report_text = report.read_text(encoding="utf-8")
+            restored.update(
+                parse_test_report_approval(report_text).to_state(
+                    "test_report_approved"
+                )
+            )
             status = parse_workflow_status_file(report)
             if status is not None and status.test_passed is not None:
                 restored["test_passed"] = status.test_passed
@@ -251,9 +257,17 @@ def _code_resume(docs_dir: Path, role: str) -> str:
     ):
         return "commit_code"
     if status and status.status in ("in_progress", "failed") and status.node in ROUTABLE_NODES:
-        return status.node
-    if status and status.next_node in ROUTABLE_NODES:
-        return status.next_node
-    if status and status.status == "completed" and nxt:
-        return nxt
-    return current
+        target = status.node
+    elif status and status.next_node in ROUTABLE_NODES:
+        target = status.next_node
+    elif status and status.status == "completed" and nxt:
+        target = nxt
+    else:
+        target = current
+
+    # 测试报告未写 test_report_approval.approved 时不得跳到 ai_review 及之后
+    if target in ("ai_review", "commit_code") and not phase_complete(
+        docs_dir, "verify_tests", {"delivery_role": role}
+    ):
+        return "verify_tests"
+    return target

@@ -66,7 +66,7 @@
 
 {{ai_rules}}
 
-用户在本会话明确提出项目规范、约定、分层、复用、测试策略方面的反馈时（单纯「确认 / 继续 / 没问题」不算）：只打开公共规则和意图已确认的涉及仓库规则，找到该改哪一条；先改冲突的旧条款，不要只在文末追加。给用户看目标文件、冲突和修改前后对比，用户同意后再写入。公共规则写回 `project_docs_dir/common_extend_rules/`，仓库规则写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。不要改引擎 `prompts/`。不要改意图已确认的 `involved_repos`。
+用户在本会话明确提出项目规范、约定、分层、复用、测试策略方面的反馈时（单纯「确认 / 继续 / 没问题」不算）：只打开公共规则和意图已确认的涉及仓库规则，找到该改哪一条；先改冲突的旧条款，不要只在文末追加。给用户看目标文件、冲突和修改前后对比，用户同意后再写入。公共规则写回 `{{project_docs_dir}}/common_extend_rules/`，仓库规则写回 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`，不要只改 references 副本。不要改引擎 `prompts/`。不要改意图已确认的 `involved_repos`。
 
 ## 计划正文结构
 
@@ -229,6 +229,8 @@ items:
 - 已有计划（续跑）：{{doc_02-plan.md}}
 
 ## 产出路径
+
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 只写这一个计划文件：`{{final_output_path}}`
 

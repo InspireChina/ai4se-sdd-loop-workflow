@@ -49,6 +49,8 @@
 
 ## 产出路径
 
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
+
 `{{output_path}}`
 
 ---

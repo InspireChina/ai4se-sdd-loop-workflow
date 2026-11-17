@@ -163,6 +163,10 @@ def parse_test_cases_approval(content: str) -> Approval:
     return parse_approval(content, "test_cases_approval")
 
 
+def parse_test_report_approval(content: str) -> Approval:
+    return parse_approval(content, "test_report_approval")
+
+
 def parse_tasks_approval(content: str) -> Approval:
     return parse_approval(content, "tasks_approval")
 

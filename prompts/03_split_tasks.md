@@ -70,16 +70,16 @@
 
 当用户在本会话中**明确提出反馈/修正意见**（针对项目规范、约定、分层、复用、测试策略等；单纯「确认 / 继续 / 没问题」不算）时：
 
-1. **按需读取**：只打开上面「项目定制约束」里列出的文件。意图已确认的涉及仓库以外不要读。要改规则时写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
+1. **按需读取**：只打开上面「项目定制约束」里列出的文件。意图已确认的涉及仓库以外不要读。要改规则时写回 `{{project_docs_dir}}/common_extend_rules/` 或 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 2. **归属判断**：判断反馈应归入哪一个 rule 文件，并简要说明依据。
 3. **先找冲突，再改（禁止一味追加）**：
    - 对照用户要求与目标 rule **现有条款**，标出冲突、重复、过时或相反的表述；
    - 优先**修订/合并/删除**冲突条款，使 rule 与用户要求一致；**不要**在未消解冲突时只在文末追加新提示词；
    - 仅当确无对应条款、且与现有条文无矛盾时，才新增条目。
 4. **先确认再写入**：**禁止**在用户明确同意前改写任何 rule 文件。须向用户展示：目标文件、冲突点摘要、拟修订前后对比（或拟删除/合并说明）；确认后再落盘。
-5. **无法归属时**：跨仓库的约定写入 `project_docs_dir/common_extend_rules/`；只属于某个仓库的约定写入 `project_docs_dir/repos/<仓库名>/extend_rules/`。落盘前先征求确认。
+5. **无法归属时**：跨仓库的约定写入 `{{project_docs_dir}}/common_extend_rules/`；只属于某个仓库的约定写入 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`。落盘前先征求确认。
 6. **`system.md` 压缩**：若 `system.md` 已较长（例如明显重复、多条过时提案、或通读成本高），写入前须**先压缩**：合并同类项、删除已落地到其它 rule 的条目、折叠过时反馈为短摘要，保持可维护；压缩方案一并请用户确认后再写。
-7. **范围**：公共规则只写 `project_docs_dir/common_extend_rules/`，仓库规则只写 `project_docs_dir/repos/<仓库名>/extend_rules/`。**不要**改引擎仓库内的 `prompts/`。
+7. **范围**：公共规则只写 `{{project_docs_dir}}/common_extend_rules/`，仓库规则只写 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`。**不要**改引擎仓库内的 `prompts/`。
 
 
 ## 结构化摘要
@@ -96,6 +96,8 @@
 - 已有任务产出（续跑，亦即 `{{final_output_path}}`）：{{doc_03-tasks.md}}
 
 ## 产出路径
+
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 | 路径 | 用途 |
 |------|------|

@@ -1,6 +1,7 @@
 """通用节点执行器 — 每个节点是独立 agent，读取配置后执行。"""
 
 import logging
+import os
 import sys
 import time
 from datetime import datetime
@@ -36,6 +37,7 @@ from ..parsers.approval_parser import (
     parse_requirement_approval,
     parse_tasks_approval,
     parse_test_cases_approval,
+    parse_test_report_approval,
 )
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
@@ -47,6 +49,7 @@ from ..role_output import (
     format_role_scope,
     output_hint,
     role_from_filename,
+    stage_dir,
     write_output_path,
 )
 from ..phase_gate import (
@@ -455,6 +458,7 @@ class NodeRunner:
                     "design_test_cases": parse_test_cases_approval,
                     "plan_session": parse_plan_approval,
                     "split_tasks": parse_tasks_approval,
+                    "verify_tests": parse_test_report_approval,
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
@@ -693,8 +697,6 @@ class NodeRunner:
             next_node = cfg.next_node if ready else node_id
         elif node_id == "implement_code":
             next_node = "verify_tests"
-        elif node_id == "verify_tests":
-            next_node = "ai_review"
         elif node_id == "ai_review":
             next_node = "commit_code"
         elif node_id == "commit_code":
@@ -787,9 +789,12 @@ class NodeRunner:
 
     def _testcase_delegation_block(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_dir(state)
-        output_label = output_hint(
+        # 用例报告在 plan/；路径相对该目录（如 02-test-cases.md、../temp-prompts/...）
+        anchor = stage_dir(docs_dir, "02-test-cases.md")
+        output_path = write_output_path(
             docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
         )
+        output_label = _prompt_rel_path(output_path, anchor)
         if phase_content_ready(docs_dir, "design_test_cases", state):
             return testcase_ready_note(output_label)
 
@@ -801,7 +806,10 @@ class NodeRunner:
             node_id="design_test_cases",
             prompt_dir=str(docs_dir),
         )
-        return testcase_delegation(tool_name, prompt_file, output_label)
+        prompt_rel = _prompt_rel_path(prompt_file, anchor)
+        return testcase_delegation(
+            tool_name, prompt_file, output_label, prompt_display=prompt_rel
+        )
 
     def _render_node_prompt(self, node_id: str, state: DevWorkflowState) -> str:
         node_cfg = self.workflow_config.nodes[node_id]
@@ -821,33 +829,39 @@ class NodeRunner:
     def _build_context(
         self, node_cfg: NodeConfig, state: DevWorkflowState, docs_dir: Path
     ) -> dict[str, str]:
-        agent_cwd = self._agent_cwd(node_cfg.node_id)
         role = str(state.get("delivery_role") or "")
+        app_root_setting = state.get("app_root") or self.workflow_config.app_root
+        app_root = resolve_app_root(self.project_root, app_root_setting)
+        project_docs = resolve_project_docs_dir(
+            app_root,
+            self.workflow_config.project_docs_dir,
+        )
+        # 文档路径相对「本节点产出所在目录」，例如从 plan/ 引用需求为 ../requirements/...
+        cfg = get_phase_config(node_cfg.node_id)
+        anchor_logical = cfg.final_file if cfg else node_cfg.output_file
+        anchor_dir = stage_dir(docs_dir, anchor_logical)
 
-        def rel(path: Path | str) -> str:
-            return _prompt_rel_path(path, agent_cwd)
+        def docs_rel(path: Path | str) -> str:
+            return _prompt_rel_path(path, anchor_dir)
 
         def hint(logical: str, role_name: str | None = None) -> str:
             raw = output_hint(docs_dir, logical, role_name if role_name is not None else role)
             # output_hint 角色未定时可能是「a、b、c」多个候选
-            return "、".join(rel(part) for part in raw.split("、") if part.strip())
+            return "、".join(docs_rel(part) for part in raw.split("、") if part.strip())
 
         original_req = docs_dir / "00-requirement.md"
         if original_req.is_file():
-            requirement_ref = f"`{rel(original_req)}`"
+            requirement_ref = f"`{docs_rel(original_req)}`"
         else:
             requirement_ref = state.get("requirement", "")
 
         context: dict[str, str] = {
             "requirement": requirement_ref,
-            "project_root": rel(self.project_root),
-            "app_root": rel(
-                resolve_app_root(
-                    self.project_root,
-                    state.get("app_root") or self.workflow_config.app_root,
-                )
-            ),
-            "docs_dir": rel(docs_dir),
+            "project_root": str(self.project_root),
+            "app_root": str(app_root),
+            # 相对本节点产出目录；与 spec 内互引同一套相对路径约定
+            "project_docs_dir": docs_rel(project_docs),
+            "docs_dir": docs_rel(docs_dir),
             "output_path": hint(node_cfg.output_file),
             "node_output_path": hint(node_cfg.output_file),
             "output_plan": hint("02-plan.md"),
@@ -868,19 +882,18 @@ class NodeRunner:
             ),
         }
 
-        cfg = get_phase_config(node_cfg.node_id)
         if cfg:
             context["final_output_path"] = hint(cfg.final_file)
         else:
-            context["final_output_path"] = rel(docs_dir / "01-requirements.md")
-        context["intent_result_path"] = rel(_intent_result_path(docs_dir))
+            context["final_output_path"] = docs_rel(docs_dir / "01-requirements.md")
+        context["intent_result_path"] = docs_rel(_intent_result_path(docs_dir))
 
         for inp in node_cfg.inputs:
             if inp.kind == "state":
                 context[inp.key] = self._format_state_value(state.get(inp.key), inp.key)
             elif inp.kind == "doc":
                 doc_path = resolve_doc_path(docs_dir, inp.key, role)
-                doc_ref = _format_doc_ref(doc_path, agent_cwd)
+                doc_ref = _format_doc_ref(doc_path, anchor_dir)
                 slug = inp.key.replace(".md", "").replace("-", "_")
                 context[slug] = doc_ref
                 context[f"doc_{inp.key}"] = doc_ref
@@ -904,12 +917,6 @@ class NodeRunner:
             )
             context.update(meta.to_context())
 
-        app_root_setting = state.get("app_root") or self.workflow_config.app_root
-        app_root = resolve_app_root(self.project_root, app_root_setting)
-        project_docs = resolve_project_docs_dir(
-            app_root,
-            self.workflow_config.project_docs_dir,
-        )
         context.update(_intent_and_repo_context(state))
         involved_repos = state.get("involved_repos")
         metadata_present = involved_repos is not None
@@ -926,6 +933,7 @@ class NodeRunner:
             references,
             mode=rule_catalog_mode(node_cfg.node_id, metadata_present),
             involved_repos=list(involved_repos or []),
+            project_docs_dir=docs_rel(project_docs),
         )
 
         context["recommendation_threshold"] = str(
@@ -994,20 +1002,18 @@ class NodeRunner:
         header += "\n---\n\n"
         return header + content
 
-def _prompt_rel_path(path: Path | str, cwd: Path) -> str:
-    """相对 agent cwd 的路径，方便提示词里让 AI 自己打开。"""
-    target = Path(path).expanduser()
-    try:
-        return str(target.resolve().relative_to(cwd.resolve())).replace("\\", "/")
-    except ValueError:
-        return str(target.resolve())
+def _prompt_rel_path(path: Path | str, base: Path) -> str:
+    """相对当前文档所在目录（可含 ..），例如 ../requirements/01-requirements.md。"""
+    target = Path(path).expanduser().resolve()
+    root = base.expanduser().resolve()
+    return os.path.relpath(str(target), str(root)).replace("\\", "/")
 
 
-def _format_doc_ref(doc_path: Path, cwd: Path) -> str:
-    """已有文档只给路径，不内嵌正文；不存在则标明。"""
+def _format_doc_ref(doc_path: Path, base: Path) -> str:
+    """已有文档只给相对当前产出目录的路径，不内嵌正文；不存在则标明。"""
     if not doc_path.is_file():
         return "（尚无此文件）"
-    return f"`{_prompt_rel_path(doc_path, cwd)}`"
+    return f"`{_prompt_rel_path(doc_path, base)}`"
 
 
 def _intent_result_path(docs_dir: Path) -> Path:
@@ -1072,12 +1078,8 @@ def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 1
         return False
     content = output_path.read_text(encoding="utf-8")
     body = content.split("## Workflow 状态", 1)[0].strip()
+    if node_id == "verify_tests":
+        return verify_report_ready(body)
     if len(body) < min_chars:
         return False
-    if node_id == "verify_tests":
-        if any(output_path.parent.glob("*.png")) or any(
-            output_path.parent.glob("*.jpg")
-        ):
-            return False
-        return verify_report_ready(body)
     return True

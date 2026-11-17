@@ -24,7 +24,7 @@
 
 在 `{{app_root}}` 及其可达范围内扫描可改的 git 仓库/工程（可任意深度，不一定是下一级）。对照需求选出这次要改代码的，写入 `involved_repos`。
 
-每一项必须是相对 `{{app_root}}` 的路径（如 `.`、`xqgy-service`、`services/xqgy-service`）。用正斜杠，不要写绝对路径。没有要改的就写空列表。不要去 `project_docs_dir/repos/` 列候选。
+每一项必须是相对 `{{app_root}}` 的路径（如 `.`、`xqgy-service`、`services/xqgy-service`）。用正斜杠，不要写绝对路径。没有要改的就写空列表。不要去 `{{project_docs_dir}}/repos/` 列候选。
 
 ## 3. 工作分支
 

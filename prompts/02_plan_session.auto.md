@@ -62,7 +62,7 @@
 
 {{ai_rules}}
 
-不要在无人值守里改 `project_docs_dir/common_extend_rules/` 或 `repos/<仓库名>/extend_rules/`。规范不够用时，在计划里写明假设，不要改配置。
+不要在无人值守里改 `{{project_docs_dir}}/common_extend_rules/` 或 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`。规范不够用时，在计划里写明假设，不要改配置。
 
 ## 计划正文结构
 
@@ -225,6 +225,8 @@ items:
 - 已有计划（续跑）：{{doc_02-plan.md}}
 
 ## 产出路径
+
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 只写 `{{final_output_path}}`。用例文件 `{{output_test_cases}}` 按文首说明处理，本会话不要自己写。
 

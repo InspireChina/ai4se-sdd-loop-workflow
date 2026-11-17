@@ -153,6 +153,12 @@ class DevWorkflow:
             return "implement_code"
         return END
 
+    def _route_after_verify_tests(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "verify_tests", state):
+            return "ai_review"
+        return END
+
     def _resolve_app_root(self, state: DevWorkflowState | None = None) -> Path:
         if state and state.get("app_root"):
             return resolve_app_root(self.project_root, state["app_root"])
@@ -234,7 +240,14 @@ class DevWorkflow:
             },
         )
         workflow.add_edge("implement_code", "verify_tests")
-        workflow.add_edge("verify_tests", "ai_review")
+        workflow.add_conditional_edges(
+            "verify_tests",
+            self._route_after_verify_tests,
+            {
+                "ai_review": "ai_review",
+                END: END,
+            },
+        )
         workflow.add_edge("ai_review", "commit_code")
         workflow.add_edge("commit_code", END)
 

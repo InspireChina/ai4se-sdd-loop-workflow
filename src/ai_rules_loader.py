@@ -217,12 +217,29 @@ def build_ai_rules_prompt(
     *,
     mode: str = "common_only",
     involved_repos: list[str] | None = None,
+    project_docs_dir: Path | str | None = None,
 ) -> str:
-    """主 prompt 里只列出该读的 references 文件，正文不写入。"""
+    """主 prompt 里只列出该读的 references 文件，正文不写入。
+
+    ``project_docs_dir`` 应为相对本节点产出目录的路径（如 ``../../..``），
+    不要传本机绝对路径。
+    """
     involved = list(involved_repos or [])
+    if project_docs_dir:
+        docs_root = str(project_docs_dir).replace("\\", "/").rstrip("/")
+        write_back = (
+            f"要修改规则时，写回 `{docs_root}/common_extend_rules/` "
+            f"或 `{docs_root}/repos/<仓库名>/extend_rules/`，"
+            "不要只改 references 里的副本。"
+        )
+    else:
+        write_back = (
+            "要修改规则时，写回项目文档目录下的 `common_extend_rules/` "
+            "或 `repos/<仓库名>/extend_rules/`，不要只改 references 里的副本。"
+        )
     lines = [
         "扩展规则在本提示词同级的 `references/`，正文没有写进本文件。",
-        "要修改规则时，写回 `project_docs_dir/common_extend_rules/` 或 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 里的副本。",
+        write_back,
         "",
     ]
     if mode == "discover":

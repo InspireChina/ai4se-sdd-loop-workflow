@@ -32,8 +32,11 @@ def save_node_prompt(
     return prompt_file
 
 
-def launch_read_prompt(prompt_file: Path, *, extra: str = "") -> str:
-    path = prompt_file.resolve()
+def launch_read_prompt(
+    prompt_file: Path, *, display_path: str | None = None, extra: str = ""
+) -> str:
+    # display_path 相对当前产出文档目录（可含 ..）；缺省时只用文件名，避免本机绝对路径
+    path = (display_path or prompt_file.name).replace("\\", "/")
     parts = [
         "Read and follow ALL instructions in this file using your read tool "
         f"(do NOT use @ to inline it):\n{path}",

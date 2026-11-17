@@ -49,7 +49,7 @@
 
 ### 用户反馈 → 扩展 rule 修订（**必须遵守**）
 
-当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和意图已确认的涉及仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `project_docs_dir/common_extend_rules/`，单仓库写回 `project_docs_dir/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
+当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和意图已确认的涉及仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `{{project_docs_dir}}/common_extend_rules/`，单仓库写回 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 
 ## 工程结构
 
@@ -62,6 +62,8 @@
 `{{output_ai_review}}` 最开头先写「角色与版块」，照抄计划结论里的角色、版块、依据。文件名后缀已经写在产出路径里，不要另选。
 
 ## 产出路径
+
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 `{{output_path}}`
 

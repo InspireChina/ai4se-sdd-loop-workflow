@@ -31,6 +31,8 @@
 
 ## 产出路径（必须使用写文件工具）
 
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
+
 整个流程只写一个文件：
 
 | 路径 | 用途 |

@@ -32,7 +32,7 @@
 2. 在报告同目录新建 `attachments/`，测试用例文件都放在这里。
    - 扩展 rule 没有规定形式：写一份 markdown，路径 `attachments/test-cases.md`。
    - 扩展 rule 规定了形式：按那个形式写，文件仍然放在 `attachments/`。
-3. 报告里写明测试用例的位置。
+3. 报告里引用同一需求目录下其他文档（含用例附件）时，写相对本报告所在目录的路径（如 `attachments/test-cases.md`、`../requirements/01-requirements.md`），禁止本机绝对路径。
 4. 报告和用例文件都落盘后，在报告末尾加上写完标记。这只表示生成结束，不要列澄清问题，不要等用户确认：
 
 ```yaml test_cases_approval

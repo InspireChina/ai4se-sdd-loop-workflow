@@ -14,7 +14,13 @@ from .parsers.approval_parser import (
 )
 from .parsers.clarification_parser import parse_clarification_checklist
 from .parsers.requirement_parser import parse_requirement_metadata
-from .role_output import find_output, role_from_filename, write_output_path
+from .parsers.test_report_parser import has_test_result_table
+from .role_output import (
+    ROLE_SCOPED_OUTPUTS,
+    find_output,
+    role_from_filename,
+    write_output_path,
+)
 from .state import DevWorkflowState
 
 
@@ -44,10 +50,9 @@ def _stage_file(docs_dir: Path, node_id: str, state: DevWorkflowState) -> Path |
     if not cfg:
         return None
     role = delivery_role_from_docs(docs_dir, state)
-    lookup = None if cfg.final_file not in {
-        "02-plan.md",
-        "03-tasks.md",
-    } else (role or None)
+    lookup = (
+        (role or None) if cfg.final_file in ROLE_SCOPED_OUTPUTS else None
+    )
     return find_output(docs_dir, cfg.final_file, lookup)
 
 
@@ -96,6 +101,17 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         next_node="implement_code",
         min_body_chars=200,
     ),
+    "verify_tests": PhaseConfig(
+        node_id="verify_tests",
+        final_file="05-test-report.md",
+        approval_block="test_report_approval",
+        approval_state_key="test_report_approved",
+        next_node="ai_review",
+        min_body_chars=120,
+        # 定稿块由本节点写 approved（完成标记），不等人二次点头
+        requires_approval=False,
+        allow_unresolved_checklist=True,
+    ),
 }
 
 
@@ -134,6 +150,15 @@ def _validate_test_cases_final(content: str, cfg: PhaseConfig) -> bool:
     return status in ("pending", "approved")
 
 
+def _validate_test_report_final(content: str, cfg: PhaseConfig) -> bool:
+    """测试报告定稿：须有用例结果表，且 ``test_report_approval.status == approved``。"""
+    if not _validate_generic_final(content, cfg):
+        return False
+    if not has_test_result_table(content):
+        return False
+    return read_approval_status(content, "test_report_approval") == "approved"
+
+
 def _validate_plan_final(content: str, cfg: PhaseConfig) -> bool:
     """计划定稿必须带 plan_metadata，后续节点才知道读哪些仓库规则。"""
     if not _validate_generic_final(content, cfg):
@@ -155,6 +180,7 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
     "design_test_cases": _validate_test_cases_final,
     "plan_session": _validate_plan_final,
     "split_tasks": _validate_generic_final,
+    "verify_tests": _validate_test_report_final,
 }
 
 

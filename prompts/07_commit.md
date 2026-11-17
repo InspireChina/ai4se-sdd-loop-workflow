@@ -9,7 +9,7 @@
 
 ## 硬性约束（引擎级，不可被扩展 rule 覆盖）
 
-1. **禁止提交文档产出**：文档在团队文档仓库 `{{docs_dir}}`（`project_docs_dir/spec/<需求名>/`）。不得把该目录 `git add` / commit 进业务仓库（含本节点产出 `{{output_commit}}`）。
+1. **禁止提交文档产出**：文档在团队文档仓库 `{{docs_dir}}`（`{{project_docs_dir}}/spec/<需求名>/`）。不得把该目录 `git add` / commit 进业务仓库（含本节点产出 `{{output_commit}}`）。
 2. 提交范围仅限业务代码与相关测试等非 docs 改动；不确定是否属于 docs 时先排除。
 3. **默认不 push**（除非扩展 rule 明确要求）。在涉及仓库路径（相对 `{{app_root}}`：`{{involved_repos_text}}`）内提交，停在 `{{git_branch}}` 上，不要换分支。
 4. 无改动可提交时：写报告说明 nothing to commit，正常结束（勿空 commit）。
@@ -59,5 +59,7 @@
 `{{output_commit}}` 最开头先写「角色与版块」，照抄计划结论里的角色、版块、依据。文件名后缀已经写在产出路径里，不要另选。
 
 ## 产出路径
+
+本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 写入 `{{output_path}}`：是否提交、message、commit hash（若有）、跳过/拒绝原因、是否遵循了扩展 rule、**后续 Action List**。
