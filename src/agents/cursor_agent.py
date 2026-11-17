@@ -37,7 +37,7 @@ class CursorTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        launch = launch_read_prompt(prompt_file, cwd=cwd)
         cli_flags = [
             "-p",
             "--force",
@@ -103,7 +103,7 @@ class CursorTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        launch = launch_read_prompt(prompt_file, cwd=cwd)
         cli_flags = [
             "--trust",
             "--force",

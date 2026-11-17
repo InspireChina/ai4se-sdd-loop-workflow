@@ -221,7 +221,7 @@ def build_ai_rules_prompt(
 ) -> str:
     """主 prompt 里只列出该读的 references 文件，正文不写入。
 
-    ``project_docs_dir`` 应为相对本节点产出目录的路径（如 ``../../..``），
+    ``project_docs_dir`` 应为相对本提示词所在 ``temp-prompts/`` 的路径（如 ``../../..``），
     不要传本机绝对路径。
     """
     involved = list(involved_repos or [])

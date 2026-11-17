@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..agents.base import AIToolResult
-from ..agents.prompt_file import save_node_prompt
+from ..agents.prompt_file import TEMP_PROMPT_DIR, save_node_prompt
 from ..agents.registry import get_ai_tool
 from ..agents.subagent_delegation import (
     testcase_delegation,
@@ -52,7 +52,6 @@ from ..role_output import (
     format_role_scope,
     output_hint,
     role_from_filename,
-    stage_dir,
     write_output_path,
 )
 from ..phase_gate import (
@@ -789,8 +788,9 @@ class NodeRunner:
 
     def _testcase_delegation_block(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_dir(state)
-        # 用例报告在 plan/；路径相对该目录（如 02-test-cases.md、../temp-prompts/...）
-        anchor = stage_dir(docs_dir, "02-test-cases.md")
+        # 与主提示词一致：路径相对 temp-prompts/（提示词文件所在目录）
+        anchor = docs_dir / TEMP_PROMPT_DIR
+        agent_cwd = self._agent_cwd("design_test_cases")
         output_path = write_output_path(
             docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
         )
@@ -802,11 +802,11 @@ class NodeRunner:
         test_prompt = self._render_node_prompt("design_test_cases", state)
         prompt_file = save_node_prompt(
             test_prompt,
-            str(self._agent_cwd("design_test_cases")),
+            str(agent_cwd),
             node_id="design_test_cases",
             prompt_dir=str(docs_dir),
         )
-        prompt_rel = _prompt_rel_path(prompt_file, anchor)
+        prompt_rel = _prompt_rel_path(prompt_file, Path(agent_cwd))
         return testcase_delegation(
             tool_name, prompt_file, output_label, prompt_display=prompt_rel
         )
@@ -836,10 +836,10 @@ class NodeRunner:
             app_root,
             self.workflow_config.project_docs_dir,
         )
-        # 文档路径相对「本节点产出所在目录」，例如从 plan/ 引用需求为 ../requirements/...
+        # 文档路径相对「本提示词所在目录 temp-prompts/」，Agent 按提示词文件目录解析，勿按 cwd
         cfg = get_phase_config(node_cfg.node_id)
-        anchor_logical = cfg.final_file if cfg else node_cfg.output_file
-        anchor_dir = stage_dir(docs_dir, anchor_logical)
+        anchor_dir = docs_dir / TEMP_PROMPT_DIR
+        anchor_dir.mkdir(parents=True, exist_ok=True)
 
         def docs_rel(path: Path | str) -> str:
             return _prompt_rel_path(path, anchor_dir)
@@ -859,7 +859,7 @@ class NodeRunner:
             "requirement": requirement_ref,
             "project_root": str(self.project_root),
             "app_root": str(app_root),
-            # 相对本节点产出目录；与 spec 内互引同一套相对路径约定
+            # 相对本提示词所在 temp-prompts/；Agent 按提示词目录解析
             "project_docs_dir": docs_rel(project_docs),
             "docs_dir": docs_rel(docs_dir),
             "output_path": hint(node_cfg.output_file),

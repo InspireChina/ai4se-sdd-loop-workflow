@@ -33,6 +33,8 @@ def _launch_read_prompt_oneline(prompt_file: Path) -> str:
     return (
         "Read and follow ALL instructions in this file using your read tool "
         f"(do NOT use @ to inline it): {path} "
+        "Paths listed inside that prompt file are relative to the prompt file's "
+        "directory (temp-prompts/), not to the shell cwd. "
         "Execute everything described in that file completely."
     )
 

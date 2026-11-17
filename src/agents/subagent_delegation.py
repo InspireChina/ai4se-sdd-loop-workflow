@@ -46,8 +46,8 @@ def _shared_rules(
 
 {launch}
 
-子代理的当前目录与本会话相同，是业务项目根。不要改到引擎仓库。
-用例不分前后端，写成一份整体。报告写到 `{output_label}`。用例正文放在报告同目录的 `attachments/`，报告里写明相对路径（如 `attachments/test-cases.md`），禁止本机绝对路径。
+子代理的当前目录与本会话相同，是业务项目根。
+用例不分前后端，写成一份整体。报告路径 `{output_label}` 相对用例 prompt 所在的 `temp-prompts/` 目录（不是相对业务根）。用例正文放在报告同目录的 `attachments/`，报告正文里的互引写相对该报告文件所在目录的路径（如 `attachments/test-cases.md`），禁止本机绝对路径。
 你禁止自己写用例。子代理在后台写文件的同时，你继续完成本会话的计划工作。
 在把计划文件里的 `plan_approval` 写成 `approved` 之前，确认用例报告里已经有 `test_cases_approval.status: pending`（人已经确认过则是 `approved`）。没有这个写完标记表示用例还在写，不要收尾。
 """
