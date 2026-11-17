@@ -36,6 +36,9 @@ from ..parsers.approval_parser import (
     parse_plan_role,
     parse_requirement_approval,
     parse_tasks_approval,
+    parse_ai_review_approval,
+    parse_commit_approval,
+    parse_implementation_approval,
     parse_test_cases_approval,
     parse_test_report_approval,
 )
@@ -458,7 +461,10 @@ class NodeRunner:
                     "design_test_cases": parse_test_cases_approval,
                     "plan_session": parse_plan_approval,
                     "split_tasks": parse_tasks_approval,
+                    "implement_code": parse_implementation_approval,
                     "verify_tests": parse_test_report_approval,
+                    "ai_review": parse_ai_review_approval,
+                    "commit_code": parse_commit_approval,
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
@@ -695,12 +701,6 @@ class NodeRunner:
             else:
                 ready = phase_content_ready(docs_dir, node_id, state)
             next_node = cfg.next_node if ready else node_id
-        elif node_id == "implement_code":
-            next_node = "verify_tests"
-        elif node_id == "ai_review":
-            next_node = "commit_code"
-        elif node_id == "commit_code":
-            next_node = ""
 
         if auto_mode and node_id == "analyze_requirements" and phase_complete(
             docs_dir, "analyze_requirements", state

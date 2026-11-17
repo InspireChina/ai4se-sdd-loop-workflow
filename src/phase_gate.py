@@ -101,6 +101,16 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         next_node="implement_code",
         min_body_chars=200,
     ),
+    "implement_code": PhaseConfig(
+        node_id="implement_code",
+        final_file="04-implementation.md",
+        approval_block="implementation_approval",
+        approval_state_key="implementation_approved",
+        next_node="verify_tests",
+        min_body_chars=120,
+        requires_approval=False,
+        allow_unresolved_checklist=True,
+    ),
     "verify_tests": PhaseConfig(
         node_id="verify_tests",
         final_file="05-test-report.md",
@@ -109,6 +119,26 @@ PHASE_CONFIGS: dict[str, PhaseConfig] = {
         next_node="ai_review",
         min_body_chars=120,
         # 定稿块由本节点写 approved（完成标记），不等人二次点头
+        requires_approval=False,
+        allow_unresolved_checklist=True,
+    ),
+    "ai_review": PhaseConfig(
+        node_id="ai_review",
+        final_file="06-ai-review.md",
+        approval_block="ai_review_approval",
+        approval_state_key="ai_review_approved",
+        next_node="commit_code",
+        min_body_chars=120,
+        requires_approval=False,
+        allow_unresolved_checklist=True,
+    ),
+    "commit_code": PhaseConfig(
+        node_id="commit_code",
+        final_file="07-commit.md",
+        approval_block="commit_approval",
+        approval_state_key="commit_approved",
+        next_node="",
+        min_body_chars=80,
         requires_approval=False,
         allow_unresolved_checklist=True,
     ),
@@ -150,13 +180,18 @@ def _validate_test_cases_final(content: str, cfg: PhaseConfig) -> bool:
     return status in ("pending", "approved")
 
 
-def _validate_test_report_final(content: str, cfg: PhaseConfig) -> bool:
-    """测试报告定稿：须有用例结果表，且 ``test_report_approval.status == approved``。"""
+def _validate_agent_done_approval(content: str, cfg: PhaseConfig) -> bool:
+    """编码及之后节点：Agent 写完定稿块 ``status: approved`` 即视为本节点完成。"""
     if not _validate_generic_final(content, cfg):
         return False
-    if not has_test_result_table(content):
+    return read_approval_status(content, cfg.approval_block) == "approved"
+
+
+def _validate_test_report_final(content: str, cfg: PhaseConfig) -> bool:
+    """测试报告定稿：须有用例结果表，且 ``test_report_approval.status == approved``。"""
+    if not _validate_agent_done_approval(content, cfg):
         return False
-    return read_approval_status(content, "test_report_approval") == "approved"
+    return has_test_result_table(content)
 
 
 def _validate_plan_final(content: str, cfg: PhaseConfig) -> bool:
@@ -180,7 +215,10 @@ CONTENT_VALIDATORS: dict[str, Callable[[str, PhaseConfig], bool]] = {
     "design_test_cases": _validate_test_cases_final,
     "plan_session": _validate_plan_final,
     "split_tasks": _validate_generic_final,
+    "implement_code": _validate_agent_done_approval,
     "verify_tests": _validate_test_report_final,
+    "ai_review": _validate_agent_done_approval,
+    "commit_code": _validate_agent_done_approval,
 }
 
 

@@ -153,10 +153,26 @@ class DevWorkflow:
             return "implement_code"
         return END
 
+    def _route_after_implement_code(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "implement_code", state):
+            return "verify_tests"
+        return END
+
     def _route_after_verify_tests(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
         if phase_complete(docs_dir, "verify_tests", state):
             return "ai_review"
+        return END
+
+    def _route_after_ai_review(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "ai_review", state):
+            return "commit_code"
+        return END
+
+    def _route_after_commit_code(self, state: DevWorkflowState) -> str:
+        # 定稿与否都结束本次图；未定稿续跑会回到 commit_code
         return END
 
     def _resolve_app_root(self, state: DevWorkflowState | None = None) -> Path:
@@ -239,7 +255,14 @@ class DevWorkflow:
                 END: END,
             },
         )
-        workflow.add_edge("implement_code", "verify_tests")
+        workflow.add_conditional_edges(
+            "implement_code",
+            self._route_after_implement_code,
+            {
+                "verify_tests": "verify_tests",
+                END: END,
+            },
+        )
         workflow.add_conditional_edges(
             "verify_tests",
             self._route_after_verify_tests,
@@ -248,8 +271,19 @@ class DevWorkflow:
                 END: END,
             },
         )
-        workflow.add_edge("ai_review", "commit_code")
-        workflow.add_edge("commit_code", END)
+        workflow.add_conditional_edges(
+            "ai_review",
+            self._route_after_ai_review,
+            {
+                "commit_code": "commit_code",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "commit_code",
+            self._route_after_commit_code,
+            {END: END},
+        )
 
         return workflow.compile()
 

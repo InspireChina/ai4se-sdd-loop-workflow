@@ -54,3 +54,13 @@
 本文件若引用同一需求目录（本需求 `spec/<name>/` 产出树）下其他文档，一律写相对本文件所在目录的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。
 
 写入 `{{output_path}}`：是否提交、message、commit hash（若有）、跳过原因、是否遵循了扩展 rule、**后续 Action List**。
+
+报告正文写完后，在同一文件末尾写入定稿标记（引擎据此结束本节点）：
+
+```yaml commit_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "无人值守提交节点定稿完成"
+```
+
+未写或仍为 `pending` 时本节点不结束。

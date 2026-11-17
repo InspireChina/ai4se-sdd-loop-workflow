@@ -82,3 +82,13 @@
 ### 阶段 3：定稿报告
 
 写入 `{{output_path}}`：审查范围、Findings（按方向分类、含是否已修）、修改摘要、测试回归、未修项与理由、结论。
+
+报告正文写完后，在同一文件末尾写入定稿标记（引擎据此自动进入下一节点；未写或仍为 `pending` 时本节点不结束）：
+
+```yaml ai_review_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "AI Review 定稿完成"
+```
+
+写完 `approved` 即表示本节点完成，**不要**再等人确认「继续」。

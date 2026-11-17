@@ -47,7 +47,10 @@ class DevWorkflowState(TypedDict, total=False):
     intent_approved: bool
     plan_approved: bool
     test_cases_approved: bool
+    implementation_approved: bool
     test_report_approved: bool
+    ai_review_approved: bool
+    commit_approved: bool
     tasks_approved: bool
     resume_from_node: str
     # 意图确认的工作分支；新建时的基线（可空）。由 AI 在涉及仓库目录内 checkout。

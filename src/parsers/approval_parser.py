@@ -167,6 +167,18 @@ def parse_test_report_approval(content: str) -> Approval:
     return parse_approval(content, "test_report_approval")
 
 
+def parse_implementation_approval(content: str) -> Approval:
+    return parse_approval(content, "implementation_approval")
+
+
+def parse_ai_review_approval(content: str) -> Approval:
+    return parse_approval(content, "ai_review_approval")
+
+
+def parse_commit_approval(content: str) -> Approval:
+    return parse_approval(content, "commit_approval")
+
+
 def parse_tasks_approval(content: str) -> Approval:
     return parse_approval(content, "tasks_approval")
 

@@ -130,3 +130,13 @@
    - 若无此类事项：明确写「无」
 
 将实现报告写入 `{{output_path}}`。
+
+报告正文写完后，在同一文件末尾写入定稿标记（引擎据此自动进入下一节点；未写或仍为 `pending` 时本节点不结束）：
+
+```yaml implementation_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "实现报告定稿完成"
+```
+
+写完 `approved` 即表示本节点完成，**不要**再等人确认「继续」。

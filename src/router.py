@@ -11,6 +11,9 @@ import logging
 from pathlib import Path
 
 from .parsers.approval_parser import (
+    parse_ai_review_approval,
+    parse_commit_approval,
+    parse_implementation_approval,
     parse_intent_approval,
     parse_intent_metadata,
     parse_plan_approval,
@@ -54,6 +57,8 @@ _CODE_LADDER = (
     ("06-ai-review.md", "ai_review", "commit_code"),
     ("07-commit.md", "commit_code", ""),
 )
+
+_CODE_ORDER = ("implement_code", "verify_tests", "ai_review", "commit_code")
 
 
 def intent_dir(docs_dir: Path) -> Path:
@@ -168,6 +173,8 @@ def is_workflow_complete(docs_dir: Path, *, role: str) -> bool:
     """只看本次已确认角色的 code/07-commit。另一角色提交完成不算本次结束。"""
     if role not in TRACK_ROLES:
         return False
+    if not phase_complete(docs_dir, "commit_code", {"delivery_role": role}):
+        return False
     path = find_output(docs_dir, "07-commit.md", role)
     if path is None:
         return False
@@ -219,6 +226,14 @@ def restore_state_from_docs(
                 )
             )
 
+        impl = find_output(docs_dir, "04-implementation.md", active)
+        if impl is not None:
+            restored.update(
+                parse_implementation_approval(
+                    impl.read_text(encoding="utf-8")
+                ).to_state("implementation_approved")
+            )
+
         report = find_output(docs_dir, "05-test-report.md", active)
         if report is not None:
             report_text = report.read_text(encoding="utf-8")
@@ -233,9 +248,39 @@ def restore_state_from_docs(
             else:
                 restored["test_passed"] = parse_test_passed(report_text)
 
+        review = find_output(docs_dir, "06-ai-review.md", active)
+        if review is not None:
+            restored.update(
+                parse_ai_review_approval(review.read_text(encoding="utf-8")).to_state(
+                    "ai_review_approved"
+                )
+            )
+
+        commit = find_output(docs_dir, "07-commit.md", active)
+        if commit is not None:
+            restored.update(
+                parse_commit_approval(commit.read_text(encoding="utf-8")).to_state(
+                    "commit_approved"
+                )
+            )
+
     if auto:
         restored["auto"] = True
     return restored
+
+
+def _clamp_code_target(docs_dir: Path, role: str, target: str) -> str:
+    """未写对应 ``*_approval.approved`` 时，不得跳到更后面的节点。"""
+    state = {"delivery_role": role}
+    if target not in _CODE_ORDER:
+        return target
+    target_idx = _CODE_ORDER.index(target)
+    for idx, node in enumerate(_CODE_ORDER):
+        if idx > target_idx:
+            break
+        if not phase_complete(docs_dir, node, state):
+            return node
+    return target
 
 
 def _code_resume(docs_dir: Path, role: str) -> str:
@@ -265,9 +310,4 @@ def _code_resume(docs_dir: Path, role: str) -> str:
     else:
         target = current
 
-    # 测试报告未写 test_report_approval.approved 时不得跳到 ai_review 及之后
-    if target in ("ai_review", "commit_code") and not phase_complete(
-        docs_dir, "verify_tests", {"delivery_role": role}
-    ):
-        return "verify_tests"
-    return target
+    return _clamp_code_target(docs_dir, role, target)
