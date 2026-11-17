@@ -51,9 +51,9 @@
 
 当用户明确提出风格/安全/整洁度修正意见时：只打开上面列出的公共规则和意图已确认的涉及仓库规则 → 先找冲突再改 → 先确认再写入。跨仓库写回 `{{project_docs_dir}}/common_extend_rules/`，单仓库写回 `{{project_docs_dir}}/repos/<仓库名>/extend_rules/`，不要只改 references 副本。
 
-## 工程结构
+## 工程范围
 
-编排引擎：`{{project_root}}`。业务代码：`{{app_root}}`。
+业务代码在 `{{app_root}}`。
 
 ## 本次角色
 

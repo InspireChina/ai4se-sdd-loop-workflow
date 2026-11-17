@@ -219,7 +219,9 @@ items:
 {{affected_modules}}
 - 兼容性风险：`{{compatibility_risk}}`
 
-## 参考文档（自行打开阅读；提示词不内嵌正文）
+## 参考文档（开始前必须通读；提示词不内嵌正文）
+
+动手前必须用读文件工具打开并**通读**下列每一份文档；未读完不得进入后续步骤，不得凭猜测或只看路径跳过。
 
 - 已定稿需求：{{doc_01-requirements.md}}
 - 已有计划（续跑）：{{doc_02-plan.md}}
@@ -248,7 +250,14 @@ delivery_blocks:
 role_basis: "照抄意图节点的依据"
 ```
 
-5. 在同一份文件里把 `plan_approval.status` 写成 `approved`，`confirmed_at` 用当前时间，`user_note` 写「无人值守按 ai-rules 定稿」。
+5. 在同一份文件里写入定稿标记（`confirmed_at` 用当前时间）：
+
+```yaml plan_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "无人值守按 ai-rules 定稿"
+```
+
 6. 用例文件还没写完时不要结束会话。
 
 完整 Markdown 必须用写文件工具写入 `{{final_output_path}}`。不要写 `02-plan-review.md`。

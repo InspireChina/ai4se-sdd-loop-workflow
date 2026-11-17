@@ -42,15 +42,17 @@
 4. 确无事项则写「无」；禁止空泛「请检查配置/自行验证」。
 5. 本清单只写入 docs 产出，**不得**因写清单而去 commit `docs_dir`。
 
-## 参考文档（自行打开阅读；提示词不内嵌正文；起草 message + 汇总 Action List，不是 git 提交内容）
+## 参考文档（开始前必须通读；提示词不内嵌正文；起草 message + 汇总 Action List，不是 git 提交内容）
+
+动手前必须用读文件工具打开并**通读**下列每一份文档；未读完不得起草 message / Action List，不得凭猜测或只看路径跳过。下列文档仅作起草依据，不是 git 提交内容。
 
 - 实现报告：{{doc_04-implementation.md}}
 - 测试报告：{{doc_05-test-report.md}}
 - AI Review：{{doc_06-ai-review.md}}
 
-## 工程结构
+## 工程范围
 
-编排引擎：`{{project_root}}`。业务代码：`{{app_root}}`。文档产出（**禁止提交**）：`{{docs_dir}}`。
+业务代码在 `{{app_root}}`。只在业务仓库内提交；`{{docs_dir}}` 下文档产出**禁止** `git add` / commit。
 
 ## 本次角色
 
