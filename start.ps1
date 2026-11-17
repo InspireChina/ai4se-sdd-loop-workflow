@@ -265,13 +265,14 @@ if (-not (Test-PackageInstalled $VenvPython)) {
 Write-Host '==> 依赖已安装（安装请用 init_env.cmd，此处不执行 pip install）'
 
 # ---------- default requirement ----------
-if (-not $ReqFile -and $ReqText.Count -eq 0) {
+# 续跑只传 -name：交给 run.py 读取 spec/<name>/00-requirement.md
+if (-not $ReqFile -and $ReqText.Count -eq 0 -and -not $ReqName) {
     $defaultReq = '..\docs\requirements\jwt-login-requirement.md'
     if (Test-Path -LiteralPath $defaultReq) {
         Write-Host "==> 未传需求，使用默认: $defaultReq"
         $ReqFile = $defaultReq
     } else {
-        Die '请提供需求文本或 -file；也可用 -help 查看示例'
+        Die '请提供需求文本或 -file；续跑可只传 -name。也可用 -help 查看示例'
     }
 }
 
