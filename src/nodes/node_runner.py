@@ -37,7 +37,6 @@ from ..parsers.approval_parser import (
     parse_tasks_approval,
     parse_test_cases_approval,
 )
-from ..work_branch import WorkBranchError, normalize_work_branch
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
@@ -559,13 +558,12 @@ class NodeRunner:
             }
 
         meta = parse_intent_metadata(text)
-        try:
-            branch = normalize_work_branch(meta.git_branch)
-        except WorkBranchError as exc:
+        branch = meta.git_branch.strip()
+        if not branch:
             return {
                 "current_node": node_cfg.node_id,
                 "intent_approved": False,
-                "last_error": str(exc),
+                "last_error": "意图未写入 git_branch",
             }
         logger.info(
             "意图已确认：role=%s repos=%s branch=%s（本次不落盘）",

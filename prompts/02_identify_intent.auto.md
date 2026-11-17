@@ -6,7 +6,7 @@
 
 ## 项目定制约束（**必须严格遵守**）
 
-分支命名与基线**只认扩展规则**；引擎不内置分支推荐。规则没写清分支时，沿用 `{{app_root}}` 当前已检出分支，不要自己编 `feature/...`。
+分支命名与基线**只认扩展规则**；引擎不内置分支推荐。规则没写清分支时，沿用主涉及仓库当前已检出分支，不要自己编 `feature/...`。
 
 {{ai_rules}}
 
@@ -22,14 +22,18 @@
 
 ## 2. 涉及仓库
 
-在当前终端目录 `{{app_root}}` 里扫描，找出这里有哪些可改的仓库/工程。对照需求选出这次要改代码的，写入 `involved_repos`。名字用终端目录里扫到的目录名。没有要改的就写空列表。不要去 `project_docs_dir/repos/` 列候选。
+在 `{{app_root}}` 及其可达范围内扫描可改的 git 仓库/工程（可任意深度，不一定是下一级）。对照需求选出这次要改代码的，写入 `involved_repos`。
+
+每一项必须是相对 `{{app_root}}` 的路径（如 `.`、`xqgy-service`、`services/xqgy-service`）。用正斜杠，不要写绝对路径。没有要改的就写空列表。不要去 `project_docs_dir/repos/` 列候选。
 
 ## 3. 工作分支
 
-不要自己执行 checkout。
+**由你进入 `involved_repos` 标出的相对路径目录执行 checkout**，引擎不会用脚本切分支。
 
-1. 扩展规则有分支约定 → 按规则写 `git_branch` / `git_base`
-2. 规则没有 → 用 `git branch --show-current` 得到当前分支，写入 `git_branch`，`git_base` 留空
+1. 扩展规则有分支约定 → 按规则写 `git_branch` / `git_base`，并在各路径完成 checkout
+2. 规则没有 → 在主涉及仓库目录用 `git branch --show-current`，写入 `git_branch`，`git_base` 留空；确保各涉及路径已在该分支（或按规则处理）
+
+切不过去就失败结束，不要编造分支名。
 
 ## 材料
 
@@ -45,7 +49,7 @@ delivery_blocks:
   - backend
 role_basis: "识别信号扫到了什么；两边都有时写明这次实际改哪边"
 involved_repos:
-  - <仓库名>
+  - services/xqgy-service
 git_base: ""
 git_branch: "<规则约定或当前分支>"
 ```
@@ -53,5 +57,5 @@ git_branch: "<规则约定或当前分支>"
 ```yaml intent_approval
 status: approved
 confirmed_at: "<ISO8601>"
-user_note: "无人值守按规则或当前分支确认"
+user_note: "无人值守按规则或当前分支确认，并完成 checkout"
 ```

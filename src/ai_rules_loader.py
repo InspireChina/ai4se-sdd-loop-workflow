@@ -15,6 +15,21 @@ TEMP_PROMPT_DIR = "temp-prompts"
 REFERENCES_DIRNAME = "references"
 
 PLAN_NODE_ID = "plan_session"
+
+
+def _involved_matches_repo(repo_name: str, involved_repos: list[str]) -> bool:
+    """involved_repos 是相对 app_root 的路径；规则目录名用最后一段匹配。"""
+    if not repo_name:
+        return False
+    for raw in involved_repos:
+        text = str(raw).strip().replace("\\", "/").strip("/")
+        if not text or text == ".":
+            continue
+        if text == repo_name or text.endswith("/" + repo_name) or Path(text).name == repo_name:
+            return True
+    return False
+
+
 POST_PLAN_NODE_IDS = frozenset(
     {
         "split_tasks",
@@ -114,7 +129,7 @@ def select_node_rule_files(
     公共规则只要配在该节点上就保留。仓库规则在 ``restrict_to_involved`` 时
     还得属于 ``involved_repos``。
     """
-    involved = set(involved_repos or [])
+    involved = list(involved_repos or [])
     selected: list[tuple[str, str, str, Path]] = []
     seen: set[Path] = set()
     for raw in configured_paths:
@@ -128,7 +143,9 @@ def select_node_rule_files(
                 logger.warning("节点扩展规则不在公共或仓库规则目录: %s", src)
                 continue
             name, kind, repo_name = classified
-            if kind == "repo" and restrict_to_involved and repo_name not in involved:
+            if kind == "repo" and restrict_to_involved and not _involved_matches_repo(
+                repo_name, involved
+            ):
                 continue
             resolved = src.resolve()
             if resolved in seen:
@@ -213,7 +230,7 @@ def build_ai_rules_prompt(
             [
                 "下面只列出本节点配置的规则。先判断本次要改哪些仓库，再只打开这些仓库的文件。候选不要一次读完。",
                 "`common_` 开头是公共规则，遵守项目约束前读取。",
-                "定稿时把涉及仓库写入本次计划文件（`plan/02-plan-backend.md`、`plan/02-plan-front.md` 或 `plan/02-plan-all.md`）的 `plan_metadata.involved_repos`，名字用 `project_docs_dir/repos/` 下的目录名。",
+                "定稿时把涉及仓库写入本次计划文件的 `plan_metadata.involved_repos`（相对 `app_root` 的路径，意图已确认则原样透传）。",
                 "没有要改的仓库就写空列表。后续节点只在本节点也配置了该规则、且仓库在这份名单里时才读取。",
                 "",
             ]

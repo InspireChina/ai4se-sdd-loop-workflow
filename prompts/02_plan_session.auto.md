@@ -32,12 +32,12 @@
 
 ## 工作分支与涉及仓库
 
-意图节点已经确认并检出：
+意图已确认：
 
 - 工作分支：`{{git_branch}}`（新建基线 `{{git_base}}`，可空）
 - 涉及仓库：`{{involved_repos_text}}`
 
-摸清现状，以及后面的任务和编码，都用这条分支。不要另选分支或仓库，也不要执行 checkout。`plan_metadata` 里原样透传 `git_branch`、`git_base` 和 `involved_repos`，不要改。
+`involved_repos` 是相对 `{{app_root}}` 的路径。摸清现状前先进入这些路径，确认已在 `{{git_branch}}`；没有就 checkout，不要改分支名或路径名单。`plan_metadata` 里原样透传 `git_branch`、`git_base` 和 `involved_repos`。
 
 ## 开工前先摸清现状
 

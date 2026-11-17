@@ -11,7 +11,7 @@
 
 1. **禁止提交 `docs_dir`**：文档产出目录为 `{{docs_dir}}`。不得 `git add` / commit 该目录下任何文件。
 2. 提交范围仅限业务代码与相关测试等非 docs 改动。
-3. **默认不 push**（除非扩展 rule 明确要求）。提交停在已检出的 `{{git_branch}}` 上，不要换分支。
+3. **默认不 push**（除非扩展 rule 明确要求）。在涉及仓库路径（相对 `{{app_root}}`：`{{involved_repos_text}}`）内提交，停在 `{{git_branch}}` 上，不要换分支。
 4. 无改动可提交时：写报告说明 nothing to commit，正常结束。
 
 ## 项目定制约束（**必须严格遵守**）
