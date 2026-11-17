@@ -821,73 +821,69 @@ class NodeRunner:
     def _build_context(
         self, node_cfg: NodeConfig, state: DevWorkflowState, docs_dir: Path
     ) -> dict[str, str]:
+        agent_cwd = self._agent_cwd(node_cfg.node_id)
+        role = str(state.get("delivery_role") or "")
+
+        def rel(path: Path | str) -> str:
+            return _prompt_rel_path(path, agent_cwd)
+
+        def hint(logical: str, role_name: str | None = None) -> str:
+            raw = output_hint(docs_dir, logical, role_name if role_name is not None else role)
+            # output_hint 角色未定时可能是「a、b、c」多个候选
+            return "、".join(rel(part) for part in raw.split("、") if part.strip())
+
+        original_req = docs_dir / "00-requirement.md"
+        if original_req.is_file():
+            requirement_ref = f"`{rel(original_req)}`"
+        else:
+            requirement_ref = state.get("requirement", "")
+
         context: dict[str, str] = {
-            "requirement": state.get("requirement", ""),
-            "project_root": str(self.project_root),
-            "app_root": str(
+            "requirement": requirement_ref,
+            "project_root": rel(self.project_root),
+            "app_root": rel(
                 resolve_app_root(
                     self.project_root,
                     state.get("app_root") or self.workflow_config.app_root,
                 )
             ),
-            "docs_dir": str(docs_dir),
-            "output_path": output_hint(
-                docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
-            ),
-            "node_output_path": output_hint(
-                docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
-            ),
-            "output_plan": output_hint(docs_dir, "02-plan.md", str(state.get("delivery_role") or "")),
-            "output_test_cases": output_hint(
-                docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
-            ),
-            "output_tasks": output_hint(
-                docs_dir, "03-tasks.md", str(state.get("delivery_role") or "")
-            ),
-            "output_implementation": output_hint(
-                docs_dir, "04-implementation.md", str(state.get("delivery_role") or "")
-            ),
-            "output_test_report": output_hint(
-                docs_dir, "05-test-report.md", str(state.get("delivery_role") or "")
-            ),
-            "output_ai_review": output_hint(
-                docs_dir, "06-ai-review.md", str(state.get("delivery_role") or "")
-            ),
-            "output_commit": output_hint(
-                docs_dir, "07-commit.md", str(state.get("delivery_role") or "")
-            ),
+            "docs_dir": rel(docs_dir),
+            "output_path": hint(node_cfg.output_file),
+            "node_output_path": hint(node_cfg.output_file),
+            "output_plan": hint("02-plan.md"),
+            "output_test_cases": hint("02-test-cases.md"),
+            "output_tasks": hint("03-tasks.md"),
+            "output_implementation": hint("04-implementation.md"),
+            "output_test_report": hint("05-test-report.md"),
+            "output_ai_review": hint("06-ai-review.md"),
+            "output_commit": hint("07-commit.md"),
             "git_branch": str(state.get("git_branch") or ""),
             "git_base": str(state.get("git_base") or ""),
             "requirement_slug": str(state.get("requirement_slug") or docs_dir.name),
             "requirement_type": str(state.get("requirement_type") or ""),
             "role_scope": format_role_scope(
-                str(state.get("delivery_role") or ""),
+                role,
                 list(state.get("delivery_blocks") or []),
                 str(state.get("role_basis") or ""),
             ),
         }
 
         cfg = get_phase_config(node_cfg.node_id)
-        role = str(state.get("delivery_role") or "")
         if cfg:
-            context["final_output_path"] = output_hint(docs_dir, cfg.final_file, role)
+            context["final_output_path"] = hint(cfg.final_file)
         else:
-            context["final_output_path"] = str(docs_dir / "01-requirements.md")
-        context["intent_result_path"] = str(_intent_result_path(docs_dir))
+            context["final_output_path"] = rel(docs_dir / "01-requirements.md")
+        context["intent_result_path"] = rel(_intent_result_path(docs_dir))
 
         for inp in node_cfg.inputs:
             if inp.kind == "state":
                 context[inp.key] = self._format_state_value(state.get(inp.key), inp.key)
             elif inp.kind == "doc":
-                doc_path = resolve_doc_path(
-                    docs_dir, inp.key, str(state.get("delivery_role") or "")
-                )
-                context[inp.key.replace(".md", "").replace("-", "_")] = (
-                    doc_path.read_text(encoding="utf-8") if doc_path.exists() else ""
-                )
-                context[f"doc_{inp.key}"] = context[
-                    inp.key.replace(".md", "").replace("-", "_")
-                ]
+                doc_path = resolve_doc_path(docs_dir, inp.key, role)
+                doc_ref = _format_doc_ref(doc_path, agent_cwd)
+                slug = inp.key.replace(".md", "").replace("-", "_")
+                context[slug] = doc_ref
+                context[f"doc_{inp.key}"] = doc_ref
 
         if state.get("requirement_type"):
             meta = RequirementMetadata(
@@ -997,6 +993,22 @@ class NodeRunner:
             header += f"> 备注: {result.message}\n"
         header += "\n---\n\n"
         return header + content
+
+def _prompt_rel_path(path: Path | str, cwd: Path) -> str:
+    """相对 agent cwd 的路径，方便提示词里让 AI 自己打开。"""
+    target = Path(path).expanduser()
+    try:
+        return str(target.resolve().relative_to(cwd.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(target.resolve())
+
+
+def _format_doc_ref(doc_path: Path, cwd: Path) -> str:
+    """已有文档只给路径，不内嵌正文；不存在则标明。"""
+    if not doc_path.is_file():
+        return "（尚无此文件）"
+    return f"`{_prompt_rel_path(doc_path, cwd)}`"
+
 
 def _intent_result_path(docs_dir: Path) -> Path:
     return docs_dir / "temp-prompts" / "identify_intent.result.md"

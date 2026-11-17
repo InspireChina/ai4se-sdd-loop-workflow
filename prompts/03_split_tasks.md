@@ -89,21 +89,11 @@
 - 影响模块：
 {{affected_modules}}
 
-## 标准需求文档
+## 参考文档（自行打开阅读；提示词不内嵌正文）
 
-{{doc_01-requirements.md}}
-
-## 实现计划
-
-澄清和确认都在这一份里，不要再找单独的 review 文档。
-
-{{doc_02-plan.md}}
-
-## 已有产出（续跑时非空）
-
-### `{{final_output_path}}`（决策清单与任务定稿正文都在此文件）
-
-{{doc_03-tasks.md}}
+- 已定稿需求：{{doc_01-requirements.md}}
+- 实现计划：{{doc_02-plan.md}}
+- 已有任务产出（续跑，亦即 `{{final_output_path}}`）：{{doc_03-tasks.md}}
 
 ## 产出路径
 

@@ -22,9 +22,9 @@
 - 影响模块：
 {{affected_modules}}
 
-## 标准需求文档
+## 参考文档（自行打开阅读；提示词不内嵌正文）
 
-{{doc_01-requirements.md}}
+- 已定稿需求：{{doc_01-requirements.md}}
 
 ## 产出
 

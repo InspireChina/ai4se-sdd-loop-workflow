@@ -42,19 +42,11 @@
 4. 确无事项则写「无」；禁止空泛「请检查配置/自行验证」。
 5. 本清单只写入 docs 产出，**不得**因写清单而去 commit `docs_dir`。
 
-## 可选上下文（起草 message + 汇总 Action List；不是 git 提交内容）
+## 参考文档（自行打开阅读；提示词不内嵌正文；起草 message + 汇总 Action List，不是 git 提交内容）
 
-实现报告：
-
-{{doc_04-implementation.md}}
-
-测试报告：
-
-{{doc_05-test-report.md}}
-
-AI Review：
-
-{{doc_06-ai-review.md}}
+- 实现报告：{{doc_04-implementation.md}}
+- 测试报告：{{doc_05-test-report.md}}
+- AI Review：{{doc_06-ai-review.md}}
 
 ## 工程结构
 

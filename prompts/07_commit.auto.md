@@ -33,19 +33,11 @@
 2. 条目须具体可执行（SQL/配置 key/环境/脚本路径等）；无则写「无」。禁止空泛表述。
 3. 清单只写 docs，**不得** commit `docs_dir`。
 
-## 可选上下文（起草 message + 汇总 Action List；不是 git 提交内容）
+## 参考文档（自行打开阅读；提示词不内嵌正文；起草 message + 汇总 Action List，不是 git 提交内容）
 
-实现报告：
-
-{{doc_04-implementation.md}}
-
-测试报告：
-
-{{doc_05-test-report.md}}
-
-AI Review：
-
-{{doc_06-ai-review.md}}
+- 实现报告：{{doc_04-implementation.md}}
+- 测试报告：{{doc_05-test-report.md}}
+- AI Review：{{doc_06-ai-review.md}}
 
 ## 工程结构
 

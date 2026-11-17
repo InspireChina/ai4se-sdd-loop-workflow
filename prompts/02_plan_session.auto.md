@@ -219,13 +219,10 @@ items:
 {{affected_modules}}
 - 兼容性风险：`{{compatibility_risk}}`
 
-### 已定稿需求
+## 参考文档（自行打开阅读；提示词不内嵌正文）
 
-{{doc_01-requirements.md}}
-
-### 已有计划（续跑时非空）
-
-{{doc_02-plan.md}}
+- 已定稿需求：{{doc_01-requirements.md}}
+- 已有计划（续跑）：{{doc_02-plan.md}}
 
 ## 产出路径
 
