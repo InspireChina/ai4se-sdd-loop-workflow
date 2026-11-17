@@ -1,6 +1,8 @@
-"""启动时先进入意图识别。角色确认后，只读这一角色的计划、任务和代码，决定从哪继续。
+"""启动时优先沿用本地意图；否则进入意图识别。
 
-另一角色的计划、任务和代码文件不参与本次路由。意图不落盘，每次启动重新确认。
+角色确认后，只读这一角色的计划、任务和代码，决定从哪继续。
+另一角色的计划、任务和代码文件不参与本次路由。
+意图落在 intent/02-intent-local.md（本地不提交），续跑逻辑与 restore 同在本文件。
 """
 
 from __future__ import annotations
@@ -9,6 +11,8 @@ import logging
 from pathlib import Path
 
 from .parsers.approval_parser import (
+    parse_intent_approval,
+    parse_intent_metadata,
     parse_plan_approval,
     parse_plan_git_branch,
     parse_plan_metadata,
@@ -26,6 +30,9 @@ from .role_output import blocks_for_role, find_output
 logger = logging.getLogger(__name__)
 
 TRACK_ROLES = ("backend", "frontend", "both")
+
+INTENT_FILENAME = "02-intent-local.md"
+_INTENT_GITIGNORE = "*\n!.gitignore\n"
 
 ROUTABLE_NODES = frozenset(
     {
@@ -46,6 +53,77 @@ _CODE_LADDER = (
     ("06-ai-review.md", "ai_review", "commit_code"),
     ("07-commit.md", "commit_code", ""),
 )
+
+
+def intent_dir(docs_dir: Path) -> Path:
+    return docs_dir / "intent"
+
+
+def intent_local_path(docs_dir: Path) -> Path:
+    return intent_dir(docs_dir) / INTENT_FILENAME
+
+
+def _ensure_intent_gitignore(docs_dir: Path) -> None:
+    folder = intent_dir(docs_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / ".gitignore"
+    if path.is_file():
+        return
+    path.write_text(_INTENT_GITIGNORE, encoding="utf-8")
+
+
+def clear_intent_cache(docs_dir: Path) -> None:
+    """--fresh：清掉意图本地文件（保留 .gitignore）。"""
+    folder = intent_dir(docs_dir)
+    if not folder.is_dir():
+        return
+    for path in folder.iterdir():
+        if path.name == ".gitignore":
+            continue
+        if path.is_file():
+            path.unlink()
+
+
+def persist_intent(docs_dir: Path, text: str) -> Path | None:
+    """把已确认的意图正文写入 intent/02-intent-local.md。"""
+    _ensure_intent_gitignore(docs_dir)
+    path = intent_local_path(docs_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    logger.info("意图已落盘：%s（本地不提交）", path)
+    return path
+
+
+def load_cached_intent(docs_dir: Path) -> dict | None:
+    """读取统一的本地意图文件；无效则返回 None。"""
+    path = intent_local_path(docs_dir)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not parse_intent_approval(text).is_approved:
+        return None
+    meta = parse_intent_metadata(text)
+    if meta.delivery_role not in TRACK_ROLES:
+        return None
+    if meta.involved_repos is None:
+        return None
+    branch = meta.git_branch.strip()
+    if not branch:
+        return None
+    return {
+        "delivery_role": meta.delivery_role,
+        "delivery_blocks": list(meta.delivery_blocks or []),
+        "role_basis": meta.role_basis,
+        "involved_repos": list(meta.involved_repos or []),
+        "git_branch": branch,
+        "git_base": meta.git_base,
+        "intent_approved": True,
+        "intent_text": text,
+        "intent_path": str(path),
+    }
 
 
 def _state(role: str, *, auto: bool = False) -> dict:
@@ -71,11 +149,17 @@ def resume_node(docs_dir: Path, role: str, *, auto: bool = False) -> str:
 
 
 def determine_start_node(docs_dir: Path, *, auto: bool = False) -> str:
-    """需求未完成时从需求开始。需求已完成时每次都先做意图识别。"""
+    """需求未完成时从需求开始。需求已完成时优先沿用本地意图，否则做意图识别。"""
     if not docs_dir.is_dir() or not requirements_complete(docs_dir, {"auto": auto}):
         logger.info("续跑：需求未完成 → analyze_requirements")
         return "analyze_requirements"
-    logger.info("续跑：先确认本次角色，再按该角色已有产出继续")
+    cached = load_cached_intent(docs_dir)
+    if cached:
+        role = str(cached["delivery_role"])
+        nxt = resume_node(docs_dir, role, auto=auto)
+        logger.info("续跑：沿用本地意图 role=%s → %s", role, nxt)
+        return nxt
+    logger.info("续跑：无本地意图缓存 → identify_intent")
     return "identify_intent"
 
 
@@ -93,7 +177,7 @@ def is_workflow_complete(docs_dir: Path, *, role: str) -> bool:
 def restore_state_from_docs(
     docs_dir: Path, *, role: str = "", auto: bool = False
 ) -> dict:
-    """恢复需求。角色要等本次意图确认后才有；传入角色时再恢复该角色的计划和后续状态。"""
+    """恢复需求。传入角色（来自本地意图或本次识别）时再恢复该角色的计划和后续状态。"""
     restored: dict = {}
 
     final = find_output(docs_dir, "01-requirements.md")

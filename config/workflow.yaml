@@ -33,8 +33,8 @@ nodes:
     mode: interactive
     prompt: prompts/02_identify_intent.md
     prompt_auto: prompts/02_identify_intent.auto.md
-    # 意图不落盘。输出字段仅满足节点配置，运行时不写这个文件。
-    output: intent.md
+    # 落盘到 intent/02-intent-local.md（本地不提交）；AI 先写临时 result，引擎再持久化。
+    output: 02-intent-local.md
     inputs:
       - doc: 01-requirements.md
 

@@ -22,8 +22,10 @@ from .requirement_dir import (
     save_original_requirement,
 )
 from .router import (
+    clear_intent_cache,
     determine_start_node,
     is_workflow_complete,
+    load_cached_intent,
     restore_state_from_docs,
     resume_node,
 )
@@ -268,8 +270,10 @@ class DevWorkflow:
                 if path.name == "00-requirement.md":
                     continue
                 path.unlink()
+            clear_intent_cache(docs_path)
 
         original_path = save_original_requirement(docs_path, requirement)
+        cached = None if fresh else load_cached_intent(docs_path)
         start_node = determine_start_node(docs_path, auto=auto)
 
         initial: DevWorkflowState = {
@@ -309,7 +313,24 @@ class DevWorkflow:
             "test_passed": False,
             "last_error": None,
         }
-        initial.update(restore_state_from_docs(docs_path, auto=auto))
+        cached_role = ""
+        if cached:
+            cached_role = str(cached["delivery_role"])
+            initial.update(
+                {
+                    "delivery_role": cached_role,
+                    "delivery_blocks": list(cached.get("delivery_blocks") or []),
+                    "role_basis": str(cached.get("role_basis") or ""),
+                    "involved_repos": list(cached.get("involved_repos") or []),
+                    "git_branch": str(cached.get("git_branch") or ""),
+                    "git_base": str(cached.get("git_base") or ""),
+                    "intent_approved": True,
+                    "completed_nodes": ["identify_intent"],
+                }
+            )
+        initial.update(
+            restore_state_from_docs(docs_path, role=cached_role, auto=auto)
+        )
         return self._graph.invoke(initial)
 
 

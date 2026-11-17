@@ -40,6 +40,7 @@ from ..parsers.approval_parser import (
 from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
+from ..router import persist_intent
 from ..role_output import (
     ROLE_SCOPED_OUTPUTS,
     find_output,
@@ -84,7 +85,7 @@ def _hydrate_involved_repos(
 def _hydrate_delivery_role(
     docs_dir: Path, state: DevWorkflowState
 ) -> dict[str, object]:
-    """角色只从意图节点写入的 state 来，不从别的角色的计划里取。"""
+    """角色由意图节点或启动时的本地 intent 缓存写入 state，不从别的角色的计划里取。"""
     del docs_dir, state
     return {}
 
@@ -498,7 +499,7 @@ class NodeRunner:
         docs_dir: Path,
         prompt: str,
     ) -> DevWorkflowState:
-        """扫仓库并请用户确认。结论只写入本次 state，临时文件读完即删。"""
+        """扫仓库并请用户确认。结论写入 intent/（本地不提交）并进入本次 state。"""
         result_path = _intent_result_path(docs_dir)
         result_path.parent.mkdir(parents=True, exist_ok=True)
         if result_path.exists():
@@ -565,8 +566,9 @@ class NodeRunner:
                 "intent_approved": False,
                 "last_error": "意图未写入 git_branch",
             }
+        persist_intent(docs_dir, text)
         logger.info(
-            "意图已确认：role=%s repos=%s branch=%s（本次不落盘）",
+            "意图已确认：role=%s repos=%s branch=%s（已落盘 intent/，本地不提交）",
             meta.delivery_role,
             meta.involved_repos,
             branch,

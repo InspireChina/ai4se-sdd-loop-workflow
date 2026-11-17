@@ -29,7 +29,7 @@ class DevWorkflowState(TypedDict, total=False):
     change_scope: str
     affected_modules: list[str]
     compatibility_risk: str  # low | medium | high | unknown
-    # 本次启动时意图识别确认的角色，只留在这次运行里，不写文件。前后端各走各的计划、任务和代码。
+    # 本次启动确认的角色；确认后写入 intent/02-intent-local.md（本地不提交），续跑直接读取。前后端各走各的计划、任务和代码。
     delivery_role: str  # backend | frontend | both | unknown
     delivery_blocks: list[str]  # backend / frontend
     role_basis: str

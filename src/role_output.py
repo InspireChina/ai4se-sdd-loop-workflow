@@ -27,8 +27,10 @@ ROLE_SCOPED_OUTPUTS = frozenset(
 )
 
 # 需求目录下按阶段分目录。编码、测试、评审、提交共用 code/。
+# 意图本地缓存见 router.INTENT_FILENAME（02-intent-local.md），不走角色后缀。
 OUTPUT_STAGE_DIR = {
     "01-requirements.md": "requirements",
+    "02-intent-local.md": "intent",
     "02-plan.md": "plan",
     "02-test-cases.md": "plan",
     "03-tasks.md": "task",
