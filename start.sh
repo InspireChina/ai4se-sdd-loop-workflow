@@ -187,13 +187,14 @@ fi
 echo "==> 依赖已安装（安装请用 ./init_env.sh，此处不执行 pip install）"
 
 # ---------- default requirement ----------
-if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then
+# 续跑只传 --name：交给 run.py 读取 spec/<name>/00-requirement.md
+if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 && -z "$REQ_NAME" ]]; then
   DEFAULT_REQ="../spec/requirements/jwt-login-requirement.md"
   if [[ -f "$DEFAULT_REQ" ]]; then
     echo "==> 未传需求，使用默认: $DEFAULT_REQ"
     REQ_FILE="$DEFAULT_REQ"
   else
-    die "请提供需求文本或 --file；也可用 --help 查看示例"
+    die "请提供需求文本或 --file；续跑可只传 --name。也可用 --help 查看示例"
   fi
 fi
 
