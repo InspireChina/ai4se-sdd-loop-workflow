@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow
+# start.sh — 创建虚拟环境、安装依赖并启动 ai4se-sddl-collab-harness
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +22,6 @@ usage() {
   -t, --tool TOOL     可选，覆盖全部节点 AI 工具: cursor | claude_code | codex | omp | echo
   --model MODEL       可选，覆盖全部节点模型（不支持则降级为 tool 默认）
   -d, --docs-dir DIR  覆盖完整产出目录（相对应用根或绝对路径）
-  --skip-clarification  跳过需求澄清 loop（echo 调试 / CI）
   --auto                无人值守：禁止向用户提问，内容就绪后自动过门禁
   --fresh               清除已有产出（保留 00-requirement.md）后重来
   -h, --help          显示帮助
@@ -32,7 +31,7 @@ usage() {
 示例:
   # 调试：不调真实 AI，只跑通编排
   # 产出在 <应用根>/spec/<name>/（非本仓库内；docs_dir 默认 spec）
-  ./start.sh --tool echo --skip-clarification --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
+  ./start.sh --tool echo --file ../spec/requirements/jwt-login-requirement.md --name jwt-login
 
   # 指定需求目录名
   ./start.sh --name jwt-login --file ../spec/requirements/jwt-login-requirement.md
@@ -95,7 +94,6 @@ DOCS_DIR=""
 REQ_NAME=""
 REQ_FILE=""
 REQ_TEXT=()
-SKIP_CLARIFICATION=0
 AUTO_MODE=0
 FRESH=0
 REQ_FILE=""
@@ -106,14 +104,6 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
-      ;;
-    --skip-install|--force-install|-skip-install|-force-install)
-      # 兼容旧参数：忽略；安装一律走 init_env
-      shift
-      ;;
-    --skip-clarification)
-      SKIP_CLARIFICATION=1
-      shift
       ;;
     --auto)
       AUTO_MODE=1
@@ -183,7 +173,7 @@ VENV_PY="$(venv_python)"
 [[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
 
 package_installed() {
-  "$VENV_PY" -m pip show ai4se-sdd-loop-workflow >/dev/null 2>&1
+  "$VENV_PY" -m pip show ai4se-sddl-collab-harness >/dev/null 2>&1
 }
 
 if ! package_installed; then
@@ -197,13 +187,14 @@ fi
 echo "==> 依赖已安装（安装请用 ./init_env.sh，此处不执行 pip install）"
 
 # ---------- default requirement ----------
-if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 ]]; then
+# 续跑只传 --name：交给 run.py 读取 spec/<name>/00-requirement.md
+if [[ -z "$REQ_FILE" && ${#REQ_TEXT[@]} -eq 0 && -z "$REQ_NAME" ]]; then
   DEFAULT_REQ="../spec/requirements/jwt-login-requirement.md"
   if [[ -f "$DEFAULT_REQ" ]]; then
     echo "==> 未传需求，使用默认: $DEFAULT_REQ"
     REQ_FILE="$DEFAULT_REQ"
   else
-    die "请提供需求文本或 --file；也可用 --help 查看示例"
+    die "请提供需求文本或 --file；续跑可只传 --name。也可用 --help 查看示例"
   fi
 fi
 
@@ -227,9 +218,6 @@ if [[ -n "$REQ_NAME" ]]; then
 fi
 if [[ -n "$DOCS_DIR" ]]; then
   RUN_ARGS+=(--docs-dir "$DOCS_DIR")
-fi
-if [[ "$SKIP_CLARIFICATION" -eq 1 ]]; then
-  RUN_ARGS+=(--skip-clarification)
 fi
 if [[ "$AUTO_MODE" -eq 1 ]]; then
   RUN_ARGS+=(--auto)

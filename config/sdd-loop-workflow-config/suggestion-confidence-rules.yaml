@@ -22,7 +22,7 @@
 #
 # ---------- 怎么扩展 ----------
 # 在下方 nodes.<节点ID> 下添加项目专属规则。常用节点 ID：
-#   analyze_requirements / create_plan / review_plan / split_tasks
+#   analyze_requirements / plan_session / split_tasks
 # 每条规则：condition（触发条件，自然语言）/ reason（依据）
 #
 # 示例（按需取消注释并改成你们项目的真实规则）：

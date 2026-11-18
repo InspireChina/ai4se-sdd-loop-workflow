@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""运行 ai4se-sdd-loop-workflow 的 CLI 入口。"""
+"""运行 ai4se-sddl-collab-harness 的 CLI 入口。"""
 
 import argparse
 import logging
@@ -13,7 +13,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.workflow import DevWorkflow  # noqa: E402
 from src.config_loader import load_workflow_config  # noqa: E402
-from src.requirement_dir import resolve_app_root, resolve_docs_path  # noqa: E402
+from src.requirement_dir import (  # noqa: E402
+    origin_requirements_dir,
+    resolve_app_root,
+    resolve_project_docs_dir,
+    resolve_docs_path,
+)
 
 
 def main():
@@ -38,12 +43,12 @@ def main():
     parser.add_argument(
         "--name", "-n",
         default=None,
-        help="需求目录名（默认从文件名或需求首行推导），产出落在 <应用根>/<docs_dir>/<name>/",
+        help="需求目录名（默认从文件名或需求首行推导），产出落在 <project_docs_dir>/spec/<name>/",
     )
     parser.add_argument(
         "--docs-dir",
         default=None,
-        help="覆盖完整产出目录（相对应用根或绝对路径；默认 <应用根>/<docs_dir>/<需求名>/）",
+        help="覆盖本次产出目录（相对 project_docs_dir 或绝对路径）",
     )
     parser.add_argument(
         "--config",
@@ -57,7 +62,7 @@ def main():
         default=None,
         help=(
             "可选：覆盖所有节点的 AI 工具。"
-            "不传则使用 sdd-loop-workflow-config/workflow.yaml 与引擎配置合并结果"
+            "不传则使用 sdd-loop-workflow-config/workflow-local.yaml 与引擎配置合并结果"
         ),
     )
     parser.add_argument(
@@ -69,14 +74,9 @@ def main():
         ),
     )
     parser.add_argument(
-        "--skip-clarification",
-        action="store_true",
-        help="跳过需求澄清 loop（适用于 echo 调试或非交互场景）",
-    )
-    parser.add_argument(
         "--auto",
         action="store_true",
-        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁（隐含 --skip-clarification）",
+        help="无人值守：禁止向用户提问，内容就绪后自动过审批门禁",
     )
     parser.add_argument(
         "--fresh",
@@ -86,6 +86,7 @@ def main():
     args = parser.parse_args()
     wf_cfg = load_workflow_config(args.config)
     app_root = resolve_app_root(PROJECT_ROOT, wf_cfg.app_root)
+    content_base = resolve_project_docs_dir(app_root, wf_cfg.project_docs_dir)
 
     source_file = None
     requirement = None
@@ -97,7 +98,7 @@ def main():
         requirement = args.requirement
     elif args.name:
         existing = resolve_docs_path(
-            app_root, f"{wf_cfg.docs_dir.strip('/')}/{args.name}"
+            content_base, f"spec/{args.name}"
         ) / "00-requirement.md"
         if existing.is_file():
             source_file = existing
@@ -106,16 +107,19 @@ def main():
 
     if requirement is None:
         if args.name:
-            named_sample = (
-                app_root / wf_cfg.docs_dir / "requirements" / f"{args.name}-requirement.md"
-            )
-            if named_sample.is_file():
-                source_file = named_sample
-                requirement = named_sample.read_text(encoding="utf-8")
-                logging.info("从 %s/requirements 读取需求: %s", wf_cfg.docs_dir, named_sample)
+            origin_dir = origin_requirements_dir(content_base)
+            for candidate in (
+                origin_dir / f"{args.name}.md",
+                origin_dir / f"{args.name}-requirement.md",
+            ):
+                if candidate.is_file():
+                    source_file = candidate
+                    requirement = candidate.read_text(encoding="utf-8")
+                    logging.info("从 origin_requirements 读取需求: %s", candidate)
+                    break
 
     if requirement is None:
-        default_sample = app_root / wf_cfg.docs_dir / "requirements" / "jwt-login-requirement.md"
+        default_sample = origin_requirements_dir(content_base) / "jwt-login-requirement.md"
         if default_sample.is_file():
             source_file = default_sample
             requirement = default_sample.read_text(encoding="utf-8")
@@ -123,7 +127,7 @@ def main():
         else:
             parser.error(
                 "请提供 requirement、--file，或 --name"
-                f"（且 {wf_cfg.docs_dir}/<name>/00-requirement.md 已存在）"
+                "（且 spec/<name>/00-requirement.md 已存在）"
             )
 
     workflow = DevWorkflow(PROJECT_ROOT, args.config)
@@ -146,7 +150,6 @@ def main():
         docs_dir=args.docs_dir,
         name=args.name,
         source_file=source_file,
-        skip_clarification=args.skip_clarification,
         auto=args.auto,
         fresh=args.fresh,
     )

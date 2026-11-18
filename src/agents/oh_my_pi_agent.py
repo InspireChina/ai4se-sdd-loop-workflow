@@ -171,12 +171,12 @@ class OhMyPiTool(AITool):
         else:
             cmd.append("--auto-approve")
         cmd.extend(cls.model_cli_flags(model))
-        cmd.append(cls._launch_prompt(prompt_file))
+        cmd.append(cls._launch_prompt(prompt_file, cwd))
         return cmd
 
     @staticmethod
-    def _launch_prompt(prompt_file: Path) -> str:
-        return launch_read_prompt(prompt_file)
+    def _launch_prompt(prompt_file: Path, cwd: str | None = None) -> str:
+        return launch_read_prompt(prompt_file, cwd=cwd)
 
     @staticmethod
     def _log_launch_cmd(cmd: list[str]) -> None:

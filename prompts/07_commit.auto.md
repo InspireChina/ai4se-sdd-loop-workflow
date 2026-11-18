@@ -1,6 +1,13 @@
 > **运行模式：无人值守（--auto）** — **禁止**向用户提问。
 > 有扩展 rule → 严格按 rule 提交（仍须遵守引擎硬性约束）；**无扩展 rule → 跳过提交**，写明原因后结束。
 
+## 路径约定（必须遵守）
+
+本文件由引擎落在需求目录的 `temp-prompts/` 下再交给你阅读。
+文中列出的文档路径、产出路径、扩展规则写回路径（含 `{{project_docs_dir}}/...`），一律相对**本提示词文件所在目录**（`temp-prompts/`）解析（可含 `..`），**不要**相对终端当前工作目录（业务项目根）解析。
+业务代码在 `{{app_root}}` / `involved_repos` 下操作。
+写入产出正文时的互引，写相对**该正文文件所在目录**的路径，禁止本机绝对路径。
+
 你是提交负责人。在业务仓库 `{{app_root}}` 内处理本需求相关改动的 git 提交。
 
 ## 写作语言（**全程必须遵守**）
@@ -11,12 +18,12 @@
 
 1. **禁止提交 `docs_dir`**：文档产出目录为 `{{docs_dir}}`。不得 `git add` / commit 该目录下任何文件。
 2. 提交范围仅限业务代码与相关测试等非 docs 改动。
-3. **默认不 push**（除非扩展 rule 明确要求）。
+3. **默认不 push**（除非扩展 rule 明确要求）。在涉及仓库路径（相对 `{{app_root}}`：`{{involved_repos_text}}`）内提交，停在 `{{git_branch}}` 上，不要换分支。
 4. 无改动可提交时：写报告说明 nothing to commit，正常结束。
 
 ## 项目定制约束（**必须严格遵守**）
 
-以下约束来自业务项目根 `sdd-loop-workflow-config/ai-rules.yaml` 的 `nodes.commit_code`。
+提交策略如有项目定制，按引用读取公共规则和本次仓库的规则，不要预读其他仓库。
 
 {{ai_rules}}
 
@@ -33,30 +40,36 @@
 2. 条目须具体可执行（SQL/配置 key/环境/脚本路径等）；无则写「无」。禁止空泛表述。
 3. 清单只写 docs，**不得** commit `docs_dir`。
 
-## 可选上下文（起草 message + 汇总 Action List；不是 git 提交内容）
+## 参考文档（开始前必须通读；提示词不内嵌正文；起草 message + 汇总 Action List，不是 git 提交内容）
 
-实现报告：
+动手前必须用读文件工具打开并**通读**下列每一份文档（路径相对本提示词所在 `temp-prompts/`，见「路径约定」）；未读完不得起草 message / Action List，不得凭猜测或只看路径跳过。下列文档仅作起草依据，不是 git 提交内容。
 
-{{doc_04-implementation.md}}
+- 实现报告：{{doc_04-implementation.md}}
+- 测试报告：{{doc_05-test-report.md}}
+- AI Review：{{doc_06-ai-review.md}}
 
-测试报告：
+## 工程范围
 
-{{doc_05-test-report.md}}
-
-AI Review：
-
-{{doc_06-ai-review.md}}
-
-## 工程结构
-
-编排引擎：`{{project_root}}`。业务代码：`{{app_root}}`。文档产出（**禁止提交**）：`{{docs_dir}}`。
+业务代码在 `{{app_root}}`。只在业务仓库内提交；`{{docs_dir}}` 下文档产出**禁止** `git add` / commit。
 
 ## 本次角色
 
 {{role_scope}}
 
-`07-commit.md` 最开头先写「角色与版块」，照抄上面的角色、版块、依据。
+`{{output_commit}}` 最开头先写「角色与版块」，照抄计划结论里的角色、版块、依据。文件名后缀已经写在产出路径里，不要另选。
 
 ## 产出路径
 
+写入产出文件的正文若引用同一需求目录下其他文档，写相对**该产出文件所在目录**的路径（如 `../requirements/01-requirements.md`、`attachments/test-cases.md`），禁止本机绝对路径。（打开本提示词里列出的参考/产出路径时，仍相对 `temp-prompts/`，见上文「路径约定」。）
+
 写入 `{{output_path}}`：是否提交、message、commit hash（若有）、跳过原因、是否遵循了扩展 rule、**后续 Action List**。
+
+报告正文写完后，在同一文件末尾写入定稿标记（引擎据此结束本节点）：
+
+```yaml commit_approval
+status: approved
+confirmed_at: "<ISO8601>"
+user_note: "无人值守提交节点定稿完成"
+```
+
+未写或仍为 `pending` 时本节点不结束。

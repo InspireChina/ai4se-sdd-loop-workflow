@@ -1,240 +1,80 @@
-# ai4se-sdd-loop-workflow
+# ai4se-sddl-collab-harness
 
-从**需求 → 计划/用例 → 评审 → 任务 → 代码 → 测试 → AI Review → 提交**的工程化 Workflow。配置和产出写在业务项目里；结束时汇总须人工执行的后续事项（SQL / 配置等）。
+基于 SDD 的团队协作 harness：从**需求 → 计划/用例 → 任务 → 代码 → 测试 → AI Review → 提交**。配置与扩展写在业务项目里，文档落在团队共享的 `project_docs_dir`。
 
-**按项目扩展的核心入口是 `sdd-loop-workflow-config/ai-rules`**（见 [§5](#5-核心扩展点ai-rules)）：把项目规范、以及各节点要用的 MCP / Rules / Skills，写进扩展 md 并在 `ai-rules.yaml` 挂到对应节点即可，**不必改引擎 prompt**。`sddl init` 后改业务侧配置就能用。
+![team-collab.png](assets/img/team-collab.png)
 
-CLI（**macOS / Windows 通用**）：`sddl init` / `sddl start`，或 `sddl-init` / `sddl-start`。  
+## 目录
 
-![workflow.jpeg](assets/img/workflow.jpeg)
+1. [简单介绍](#1-简单介绍)
+2. [快速使用](#2-快速使用)
+3. [扩展能力](#3-扩展能力)
+4. [内置 Skill](#4-内置-skill)
+5. [公共文档](#5-公共文档)
+6. [断点续跑](#6-断点续跑)
+
 ---
 
-## 1. 快速使用
+## 1. 简单介绍
+
+- 按节点跑完整交付链路；人工模式可澄清/审批，`--auto` 无人值守自决。
+- 产出按角色落盘（`-backend` / `-front` / `-all`）；需求与用例报告共用一份。
+- **项目定制不改引擎 prompt**：改 `project_docs_dir` 下的扩展规则，以及业务侧 `workflow-local.yaml`。
+- 结束时汇总须人工执行的事项（SQL / 配置等）到 Action List。
+
+---
+
+## 2. 快速使用
 
 ```bash
-git clone <本仓库地址>
-cd ai4se-sdd-loop-workflow
+# 引擎仓库：初始化环境（Python 3.10～3.14）
+./init_env.sh          # macOS / Linux
+# Windows: .\init_env.cmd
 
-# 推荐：一键初始化（项目 .venv + 安装 + 把 venv 写入 PATH，免每次 activate）
-# 要求宿主 Python 为 3.10～3.14；旧 venv 不符时加 --force
-./init_env.sh            # macOS / Linux
-# Windows:  .\init_env.cmd
-# 重建 venv: 加 --force；只装不改 PATH: 加 --skip-path
-```
-
-也可手动：用 **3.10～3.14** 执行 `python3 -m venv .venv` → 激活 → `python -m pip install -U "pip>=21.3"` → `pip install -e .`。  
-Windows 默认过旧时，`init_env.cmd` 会优先 `py -3.14`…`-3.10`（跳过 3.8 等），并把 `.venv\Scripts` 写入**用户 PATH**，新开终端即可直接 `sddl`，无需每次 activate。
-
-装好后在业务项目根：
-
-```bash
-sddl init
-# 在 sdd-loop-workflow-config/workflow.yaml 配好 defaults.tool 后，可不带 --tool：
+# 业务项目根
+sddl init              # 生成配置，填写 project_docs_dir
 sddl start --file "/path/to/prd.md" --name login
-sddl start --name login --auto                    # 无人值守
-sddl start --name login                           # 续跑，勿加 --fresh
-# 调试或强制本环境工具时再带：
-sddl start --tool claude_code --file "/path/to/prd.md" --name login
+sddl start --name login --auto          # 无人值守
+sddl start --name login                 # 续跑（不要加 --fresh）
 ```
-
-`sddl start` / `start.cmd` **绝不**执行 `pip install`；未安装时会提示先跑 `init_env`。
 
 | 开关 | 作用 |
 |------|------|
 | `--file` | 需求文件 |
-| `--name` | 产出目录名（默认落在 `spec/<name>/`） |
+| `--name` | 需求目录名 → `spec/<name>/` |
 | `--auto` | 无人值守 |
-| `--fresh` | 清空该需求产出后重来 |
-| `--tool` | 可选；覆盖**全部**节点工具：`cursor` / `claude_code` / `codex` / `omp` / `echo`。不传则用业务/引擎配置 |
-| `--model` | 可选；覆盖全部节点模型。不传则用配置；原样传给对应 CLI（echo 等无模型概念的 tool 会忽略） |
+| `--fresh` | 清空该需求产出后重来（与续跑互斥） |
+| `--tool` / `--model` | 可选；覆盖**全部**节点。不传则用业务 `workflow-local.yaml` |
 
-需要 **Python 3.10～3.14**（不含 3.15+）、**pip ≥ 21.3** 和已登录的 AI CLI。
+需要拼启动命令时用内置 [start-workflow](#41-start-workflow) skill，命令在**终端**执行。
 
 ---
 
-## 2. `init` 在业务项目里生成什么
+## 3. 扩展能力
+
+### 核心配置（业务项目根）
 
 ```text
 your-project/
-├── sdd-loop-workflow-config/     # 业务配置（改这里）
-│   ├── workflow.yaml             # docs_dir + defaults.tool/model（覆盖引擎）
-│   ├── ai-rules.yaml             # 【核心】节点 → 扩展 md 映射
-│   ├── ai-rules/*.md             # 【核心】项目规范；亦可在此引用 MCP/Rules/Skills
-│   └── suggestion-confidence-rules.yaml  # suggestion_confidence 打分规则（叠加引擎基线）
-└── .cursor|claude|omp/skills/start-workflow/   # 拼启动命令的 skill（不在对话里执行）
+└── sdd-loop-workflow-config/
+    ├── workflow-local.yaml              # project_docs_dir、tool/model、extend_rules、阈值
+    └── suggestion-confidence-rules.yaml # 项目把握规则（叠加引擎基线；init 不覆盖）
 ```
 
-| 文件 | 作用 |
-|------|------|
-| `ai-rules.yaml` + `ai-rules/` | **核心扩展点**（详见 [§5](#5-核心扩展点ai-rules)）：规范 + MCP/Rules/Skills 引用 |
-| `workflow.yaml` | `docs_dir`；按节点 `recommendation_threshold`（推荐强度阈值，默认 0.8）；以及 **`defaults.tool` / 按节点 `tool`·`model`**（覆盖引擎，见 §5） |
-| `suggestion-confidence-rules.yaml` | `suggestion_confidence` 把握规则（详见 [§6](#6-suggestion_confidence-把握规则)）：引擎通用基线 + 项目扩展叠加 |
-| `start-workflow` skill | 读业务配置拼启动命令（可给带/不带 `--tool` 两条）；**不在当前 AI 对话里执行** |
+`workflow-local.yaml` 可配：
 
-`sddl init` 同步策略：`start-workflow` skill、`workflow.yaml`、`ai-rules/*.md` 等**一律覆盖为引擎最新模板**；仅已存在的 **`ai-rules.yaml` 与 `suggestion-confidence-rules.yaml` 保留不覆盖**（避免冲掉项目自定义）。
+| 项 | 说明 |
+|----|------|
+| `project_docs_dir` | 团队文档仓下的**项目目录**（必填且须存在） |
+| `defaults.tool` / `defaults.model` | 全节点默认 |
+| `nodes.<id>.tool` / `model` | **按节点**覆盖 tool / model |
+| `nodes.<id>.extend_rules` | 该节点要读的规则 md（路径相对 `project_docs_dir`） |
+| `nodes.<id>.recommendation_threshold` | 推荐自动采纳阈值（默认 0.8） |
 
-跑起来后，需求文档在 `<docs_dir>/<name>/`（如 `spec/login/01-requirements.md` … `07-commit.md`）。
-
-### `start-workflow` skill 用在什么时候
-
-`sddl init` 会把该 skill 装到业务项目的 AI 技能目录。在对话里触发它，只做两件事：**落本地需求文件** + **拼好 `sddl start ...` 命令**；真正跑 workflow 必须你自己在**终端**执行。
-
-| 场景 | 你怎么说 | skill 做什么 |
-|------|----------|--------------|
-| 本地已有 PRD | 给出文件路径 | 校验路径存在，直接拼 `sddl start --file ...` |
-| 需求在外部系统（Jira、Colla 等） | 告诉**卡号 / 需求标识** | 按项目已配置的 **MCP** 拉取正文 → 写入本地（如 `docs/requirements/<标识>.md`）→ 再拼启动命令 |
-| 两边都没有 | — | 先问你要路径或外部来源，不瞎拼命令 |
-
-要点：
-
-- MCP（Jira / Colla 等）需事先在 AI 环境配好；skill **不猜** MCP 名字，步骤以项目 rule / skill 输入为准。
-- skill **禁止**在当前 AI session 里执行启动命令；你复制命令到业务项目根的终端再跑（或结束对话后在系统终端跑），编排进程才能接管交互节点并续跑。
-- 审批通过、续跑都**不要**再让 skill 重跑一遍；外部终端里已在跑的进程会自己进下一节点。
-
----
-
-## 3. 有哪些节点
-
-```text
-需求 → 并行(计划+用例) → 评审 → 任务拆分 → 实现 → 测试 → AI Review → 提交
-```
-
-| 节点 | 产出 | 做什么 |
-|------|------|--------|
-| 需求分析 | `01-requirements.md` | 澄清与定稿 |
-| 制定计划 / 设计用例 | `02-plan.md`、`02-test-cases.md` | 并行初稿 |
-| 计划评审 | `02-plan-review.md` | 只 review 计划并确认；用例 review 由 QA 异步进行，不阻塞核心流程 |
-| 任务拆分 | `03-tasks.md` | 任务 + API 详细设计 |
-| 代码实现 | `04-implementation.md` + 业务代码 | 只写生产代码；AI 无法代执行的事项写入「人工后续事项」 |
-| 测试自验证 | `05-test-report.md` | 写测→跑绿→置信度；API/E2E 有栈才跑 |
-| AI 代码评审 | `06-ai-review.md` | 针对改动代码做技术整洁度/简单重构并测绿（不读需求文档） |
-| 提交代码 | `07-commit.md` | 提交（或跳过）+ 定稿「后续 Action List」；**禁止提交 `docs_dir`** |
-
-- 人工：`prompts/*.md`，澄清与审批需确认；`--auto` 用 `*.auto.md`，按 `ai-rules` 自决  
-- 测试只在「测试自验证」写；实现节点不写测试  
-- **定制项目行为 → 只改 `ai-rules`**（[§5](#5-核心扩展点ai-rules)），不要改引擎 `prompts/`  
-- 人工后续（SQL / 配置等）→ Action List；**禁止提交 `docs_dir`**
-
-### QA 异步 review 测试用例（不阻塞核心流）
-
-核心流程只 review **计划**（`review_plan` 节点），**不 review 测试用例**。测试用例的 review 由 QA 在自己机器上异步进行，与 dev 拆 task / 实现并行，互不阻塞。
-
-- `design_test_cases` 节点 headless 产出 `02-test-cases.md` 初稿，其顶部 `test_cases_approval.status` 保持 `pending`。
-- QA 在自己环境通读 `02-test-cases.md`，按需修订覆盖/预期/优先级后，**手动**将 `test_cases_approval.status` 改为 `approved`（并填 `confirmed_at` / `user_note`）。
-- 该状态**不进核心门禁**：`review_plan` → `split_tasks` → `implement_code` 都不会等待它。
-- `verify_tests` 节点会**软提示**：若跑到时 `test_cases_approval` 仍为 `pending`，测试照常执行，但报告「问题与建议」会标注「测试用例未经 QA review，结果供参考」，提醒 QA 尽快完成。
-- 建议节奏：QA 在 `implement_code` 期间完成用例 review，确保 `verify_tests` 跑的是已确认的用例。
-
----
-
-## 4. 断点续接
-
-产出落在 `<docs_dir>/<name>/`（如 `spec/login/`）。每次启动会扫描该目录已有 md 与文末 **Workflow 状态**表，从**未完成的下一节点**接着跑，不会无故从头再来。
-
-### 怎么续
-
-| 情况 | 做法 |
-|------|------|
-| 编排进程还在跑（终端未退出） | 在对话里完成澄清/审批即可，**进程会自动进下一节点**；不要再执行一遍 `sddl start` |
-| 进程已退出 / 中断 / 换机器 | 用**同一个** `--name` 再执行 `sddl start`（可带原 `--file`）；**不要**加 `--fresh` |
-| 整条链路已完成（存在完成态的 `07-commit.md`） | 再 `sddl start` 会直接判定已完成；要推倒重来才加 `--fresh`（会清空该需求下除原始需求外的 md 产出） |
-
-```bash
-# 续跑（推荐始终带上 --name，与首次一致；tool 用业务配置）
-sddl start --name login
-
-# 仅当明确要清空该需求产出、从头再来
-sddl start --file "/path/to/prd.md" --name login --fresh
-```
-
-### 依据什么定位断点
-
-启动时按「流程越靠后的产出优先」检查，并结合状态表里的 `next_node`、门禁是否通过（内容就绪 + 需审批节点已 `approved`）决定入口，例如：
-
-| 已有关键产出（示意） | 通常从哪继续 |
-|----------------------|--------------|
-| 仅有需求草稿 / 需求未批完 | `analyze_requirements` |
-| `01-requirements` 已完成，计划/用例未齐 | 并行生成或 `review_plan` |
-| `02-plan-review` 已批 | `split_tasks` |
-| `03-tasks` 已批 | `implement_code` |
-| `04-implementation` 已有 | `verify_tests` |
-| `05-test-report` 已有 | `ai_review` |
-| `06-ai-review` 已有 | `commit_code` |
-| `07-commit` 已 completed 且无下一节点 | 整单结束，无需续跑 |
-
-要点：
-
-- **同名续跑靠 `--name`**（或已有 `spec/<name>/00-requirement.md`）；换 name 等于另一条需求线。
-- **`--fresh` 与续跑互斥**；误加会清掉该需求下已有阶段文档。
-- 交互节点在外部终端跑着时，审批后由**同一进程**续跑；用 skill 时不要为「接着跑」再拼一次启动命令。
-
----
-
-## 5. 核心扩展点：`ai-rules`
-
-业务侧目录：`sdd-loop-workflow-config/`。**按项目定制时优先只改 `ai-rules`**，不必改引擎仓库里的 `prompts/` 或节点编排。
-
-| 改什么 | 作用 |
-|--------|------|
-| `ai-rules.yaml` | 声明「哪个节点注入哪些 md」 |
-| `ai-rules/*.md` | 写**你们项目的规范**；需要时在同一文件里引用 MCP / Rules / Skills |
-
-正文经 `{{ai_rules}}` 注入对应节点，**优先级高于**引擎通用提示词；`--auto` 也优先按这里消解歧义。
-
-### 怎么扩展（三步）
-
-1. 在 `ai-rules/` 下准备 md：可先改 init 自带的 `project-standards.md`，或按节点拆成 `implement_code.md`、`verify_tests.md` 等，写清项目约定。  
-2. 在 `ai-rules.yaml` 的 `nodes.<节点ID>` 下列出这些文件（未列出的节点不注入）。  
-3. 某节点要用项目已有的 **MCP / IDE·Agent Rules / Skills** 时：在**该节点对应的扩展 md**里写明「用哪个、何时用、怎么用」——**不要**在 yaml 里另配工具表。
+优先级：**节点 tool/model > defaults > 引擎 `config/workflow.yaml`**。`model: ""` 表示用该 tool 默认模型。`tool` 可选：`claude_code` / `cursor` / `codex` / `oh_my_pi`（`omp`）/ `echo`。
 
 ```yaml
-# ai-rules.yaml
-ai_rules_dir: ai-rules
-
-nodes:
-  analyze_requirements:
-    - project-standards.md
-  implement_code:
-    - project-standards.md   # 可换成 implement_code.md 等
-  verify_tests:
-    - project-standards.md
-  ai_review:
-    - project-standards.md
-  # commit_code:             # 需要定制提交策略时再打开
-  #   - project-standards.md
-```
-
-```markdown
-# project-standards.md（或节点专用 md）里引用工具
-
-- MCP：`user-jira` — 澄清时按 issue key 拉取描述与验收标准
-- Rules：遵守仓库 `.cursor/rules/api-compat.mdc`
-- Skills：Colla 需求先按项目 `fetch-colla-prd` 的读法拉取
-```
-
-常用节点 ID：`analyze_requirements` / `create_plan` / `design_test_cases` / `review_plan` / `split_tasks` / `implement_code` / `verify_tests` / `ai_review` / `commit_code`。
-
-### 提交与后续 Action List
-
-| 行为 | 说明 |
-|------|------|
-| 未配 `commit_code` | 拟 msg → 问用户；拒绝则跳过；`--auto` 跳过提交 |
-| 已配并在 md 写明策略 | 按扩展 md 提交（msg / 是否 push 等） |
-| `docs_dir` | **禁止** stage/commit（含 `07-commit.md`） |
-| Action List | `04`「人工后续事项」→ `07`「后续 Action List」；须具体，无则写「无」 |
-
-### 业务 `workflow.yaml`：docs_dir + tool/model 覆盖
-
-合并优先级：**业务 `nodes.<id>` > 业务 `defaults` > 引擎节点 > 引擎 `defaults`**。只配 `defaults.tool` 时，全部节点用该 tool。`prompt` / `mode` / `inputs` 仍在引擎 `config/workflow.yaml`。
-
-**`recommendation_threshold`（推荐强度阈值，默认 0.8，每节点单独配置）**：澄清项的 `suggestion_confidence >= 该值` 时自动采纳推荐方案、不打断用户；低于阈值才问用户。调低 → 更多项自动采纳、更少打断；调高 → 更多项需用户确认。范围 `[0, 1]`。
-
-- 每个节点在 `nodes.<id>.recommendation_threshold` 单独配置；**无全局阈值**，未配置的节点回退默认 0.8。
-- 解析优先级：**业务节点 > 引擎节点 > 0.8**。
-- `sddl init` 初始化时每个节点都写入 `0.8`，按需逐节点调。
-
-```yaml
-docs_dir: spec
+project_docs_dir: ../team-docs/my-project
 
 defaults:
   tool: claude_code
@@ -244,91 +84,115 @@ nodes:
   analyze_requirements:
     tool: claude_code
     model: ""
-    recommendation_threshold: 0.8   # 本节点阈值（0-1）；未配置回退默认 0.8
-  create_plan:
-    tool: claude_code
+    recommendation_threshold: 0.8
+    extend_rules:
+      - common_extend_rules/product.md
+  plan_session:
+    tool: cursor          # 仅计划节点换工具
     model: ""
     recommendation_threshold: 0.8
-  design_test_cases:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.8
-  review_plan:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.9   # 例：计划评审更严格，更多项需用户确认
-  split_tasks:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.75  # 例：任务拆分更宽松，更多项自动采纳
+    extend_rules:
+      - common_extend_rules/coding.md
+      - repos/xqgy-service/extend_rules/api.md
   implement_code:
     tool: claude_code
-    model: ""
+    model: "claude-opus-4"
     recommendation_threshold: 0.8
-  verify_tests:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.8
-  ai_review:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.8
-  commit_code:
-    tool: claude_code
-    model: ""
-    recommendation_threshold: 0.8
+    extend_rules: []
 ```
 
-`model: ""` 表示使用该 tool 默认模型；按节点改 `tool` / `model` 即可。配置后 `sddl start` 可不带 `--tool`。
+启动时一般**不带** `--tool`，按上表按节点生效；带 `--tool` / `--model` 会覆盖全部节点（调试用）。
 
-| 启动方式 | 含义 |
-|----------|------|
-| `sddl start --file ...`（不带 `--tool`） | **推荐**：按业务配置（可按节点不同 tool/model） |
-| `sddl start --tool claude_code --file ...` | 强制覆盖**全部**节点的 tool（调试 / 临时换工具） |
-| `--model <名>` | 可选；覆盖全部节点 model |
+### 自定义项目 rule
 
-`start-workflow` skill：若读到业务已配 `defaults.tool`（或节点 tool），会给出 **A 不带 `--tool`（推荐）** 与 **B 带 `--tool`（强制本环境）** 两条并说明区别。
+规则写在 `project_docs_dir`，**改源文件，不要只改 `temp-prompts/references/` 副本**：
 
-## 6. `suggestion_confidence` 把握规则
+```text
+<project_docs_dir>/
+  common_extend_rules/<文件>.md           # 公共
+  repos/<仓库名>/extend_rules/<文件>.md   # 单仓库（还需在 involved_repos 里）
+```
 
-交互/并行节点（`analyze_requirements` / `create_plan` / `review_plan` / `split_tasks`）在 `clarification_checklist` 里为每条 `suggestion` 评估 `suggestion_confidence`（0-1 浮点）。该值与 `recommendation_threshold` 配合：`>= 阈值` 自动采纳、`< 阈值` 才问用户。
+规则优先级高于引擎通用提示词。
 
-引擎内置通用把握规则基线 `config/suggestion-confidence-rules.yaml`，业务可在 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml` **叠加**项目专属规则（init 生成，re-init 不覆盖）。
+### 项目侧 MCP / Rules / Skills
 
-### 用法（定性，无公式）
+不在 yaml 里配工具表。在对应 **extend_rules md** 里写清要用的 MCP、仓库 Rules、业务 Skills。MCP 需事先在 AI 环境配好。
 
-规则只标方向，不给分值、无硬性公式——避免假精确。AI 综合命中的高/低把握规则，自行给出 0-1 的 `suggestion_confidence`，并在 `suggestion_reason` 注明命中的规则依据。
+### `suggestion_confidence`
 
-每条规则：`condition`（触发条件，自然语言）/ `reason`（依据，AI 在 `suggestion_reason` 里可引用）
+交互澄清里每条建议带 `suggestion_confidence`（0～1）：`>= recommendation_threshold` 自动采纳，否则问用户。
 
-- `high_confidence_rules`：命中则「把握更高」的条件
-- `low_confidence_rules`：命中则「把握更低」的条件
-
-### 合并策略
-
-- `high_confidence_rules` / `low_confidence_rules`：均**叠加**到引擎基线之后（引擎通用 + 项目扩展）
-- 业务文件留空或不配某节点 = 该节点仅用引擎通用规则
-
-### 怎么扩展（三步）
-
-1. 编辑业务根 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml`。
-2. 在 `nodes.<节点ID>` 下加 `high_confidence_rules` / `low_confidence_rules`。
-3. 保存即可，下次 `sddl start` 自动合并注入。
+- 引擎基线：`config/suggestion-confidence-rules.yaml`
+- 项目叠加：业务 `sdd-loop-workflow-config/suggestion-confidence-rules.yaml`（`high_confidence_rules` / `low_confidence_rules`，按节点追加；init 不覆盖）
 
 ```yaml
-# sdd-loop-workflow-config/suggestion-confidence-rules.yaml
 nodes:
   analyze_requirements:
     high_confidence_rules:
-      - condition: "需求来自已确认的 PRD 文档"
-        reason: "有 PRD 背书，推荐把握提升"
+      - condition: "需求来自已确认的 PRD"
+        reason: "有 PRD 背书"
     low_confidence_rules:
       - condition: "涉及支付链路"
-        reason: "支付高风险，不宜高置信自决"
-  split_tasks:
-    low_confidence_rules:
-      - condition: "任务涉及核心交易模块"
-        reason: "核心模块改动需人工确认"
+        reason: "高风险不宜高置信自决"
 ```
 
-注入位置：各节点 prompt 的 `{{suggestion_confidence_rules}}` 占位符，运行时按当前节点渲染为高/低把握规则清单。
+---
+
+## 4. 内置 Skill
+
+`sddl init` 会把引擎内置 skill 同步到业务项目的 AI 技能目录（如 `.cursor/skills/`）。当前内置如下。
+
+### 4.1 `start-workflow`
+
+**作用**：根据对话里的需求来源，落本地需求文件（如需要），并拼好完整的 `sddl start ...` 命令交给你。
+
+| 场景 | 行为 |
+|------|------|
+| 已有本地 PRD 路径 | 校验后直接拼 `--file` |
+| 外部系统（Jira / Colla 等） | 用已配置的 MCP 拉取 → 写入 `origin_requirements/` → 再拼命令 |
+| 续跑 / 审批后继续 | **不要**再用本 skill 拼启动命令；由外部终端里已在跑的进程续跑 |
+
+**硬约束**：只准备命令，**禁止**在当前 AI session 里执行 `sddl start`。你复制命令到业务项目根的终端再跑。
+
+---
+
+## 5. 公共文档
+
+### 目录约定
+
+```text
+<project_docs_dir>/
+  origin_requirements/          # 原始需求
+  common_extend_rules/          # 公共扩展规则
+  repos/<仓库名>/extend_rules/  # 仓库扩展规则
+  spec/<需求名>/
+    requirements/               # 01-requirements.md
+    intent/                     # 本地意图缓存（不提交）
+    plan/                       # 计划、用例报告 + attachments/
+    task/                       # 任务
+    code/                       # 实现 / 测试 / review / 提交
+    temp-prompts/               # 运行时提示词（相对此目录解析文档路径）
+```
+
+### 使用与规范（简）
+
+- **读提示词里的文档路径**：相对 `temp-prompts/`，不要相对终端 cwd。
+- **产出正文互引**：相对该正文文件所在目录；禁止本机绝对路径。
+- **改规则**：写回 `common_extend_rules/` 或 `repos/.../extend_rules/`。
+- **禁止**把 `spec/` 文档产出 commit 进业务仓库。
+- 编码→提交各节点以产出里的 `*_approval.status: approved` 作为定稿放行标记。
+
+---
+
+## 6. 断点续跑
+
+产出在 `<project_docs_dir>/spec/<name>/`。同 `--name` 再 `sddl start`（**不加** `--fresh`）即从断点继续。
+
+| 情况 | 做法 |
+|------|------|
+| 终端进程还在 | 对话里完成澄清/审批即可，勿再 start |
+| 进程已退出 | `sddl start --name <同名>` |
+| 要推倒重来 | 加 `--fresh`（会清空该需求阶段产出，含 `intent/`） |
+
+续跑依据：已有定稿/approval 与文末 Workflow 状态；有本地 `intent/02-intent-local.md` 则跳过意图识别。编码段未写对应 `*_approval.approved` 时不会跳步。

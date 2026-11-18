@@ -44,8 +44,8 @@ nodes:
       - condition: "涉及安全/权限/数据迁移"
         reason: "高风险领域，不宜高置信自决"
 
-  create_plan:
-    description: 制定计划（并行 headless 初稿）
+  plan_session:
+    description: 计划与澄清
     high_confidence_rules:
       - condition: "需求已 approved 且无残留 pending"
         reason: "需求已定稿，计划依据稳固"
@@ -53,6 +53,10 @@ nodes:
         reason: "有项目规范背书"
       - condition: "仓库已有同类实现可直接复用"
         reason: "有现网依据，方案把握高"
+      - condition: "plan 已对齐需求验收标准"
+        reason: "对齐验收 = 范围正确，推荐把握高"
+      - condition: "里程碑与现网迭代节奏一致"
+        reason: "节奏一致 = 可执行性高"
     low_confidence_rules:
       - condition: "引入新技术栈/新依赖"
         reason: "新技术引入不确定性，降低把握"
@@ -60,17 +64,6 @@ nodes:
         reason: "跨服务契约影响面大"
       - condition: "涉及性能/容量/可用性非功能指标"
         reason: "非功能指标需实测验证，不宜高置信"
-
-  review_plan:
-    description: 计划评审
-    high_confidence_rules:
-      - condition: "plan 已对齐需求验收标准"
-        reason: "对齐验收 = 范围正确，推荐把握高"
-      - condition: "ai-rules 有明确架构/接口口径"
-        reason: "有项目规范背书"
-      - condition: "里程碑与现网迭代节奏一致"
-        reason: "节奏一致 = 可执行性高"
-    low_confidence_rules:
       - condition: "架构与仓库现状不一致"
         reason: "偏离现状，风险高"
       - condition: "接口/API 范围超出需求"

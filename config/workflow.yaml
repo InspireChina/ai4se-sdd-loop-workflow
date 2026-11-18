@@ -1,6 +1,6 @@
 # 引擎节点编排（tool / mode / prompt / inputs）。
-# docs_dir、以及按项目覆盖的 tool/model 在业务根：
-#   <业务根>/sdd-loop-workflow-config/workflow.yaml
+# project_docs_dir、按项目覆盖的 tool/model、各节点 extend_rules 在业务根：
+#   <业务根>/sdd-loop-workflow-config/workflow-local.yaml
 # 由 sddl init 生成；业务侧 defaults / nodes.*.tool|model 会覆盖本文件。
 #
 # prompt      = 人工介入（需用户澄清 / review）
@@ -8,10 +8,9 @@
 #
 # 兼容兜底（仅当业务侧尚未 init 时使用）：
 workflow:
-  docs_dir: spec
   app_root: ..
 
-# 引擎级默认（可被业务 sdd-loop-workflow-config/workflow.yaml 覆盖）
+# 引擎级默认（可被业务 sdd-loop-workflow-config/workflow-local.yaml 覆盖）
 defaults:
   tool: claude_code
   # model: ""
@@ -28,20 +27,16 @@ nodes:
       - state: requirement
       - doc: 01-requirements.md
 
-  create_plan:
-    name: 制定计划
+  identify_intent:
+    name: 意图识别
     tool: claude_code
-    mode: headless
-    prompt: prompts/02_create_plan.md
-    prompt_auto: prompts/02_create_plan.auto.md
-    output: 02-plan.md
+    mode: interactive
+    prompt: prompts/02_identify_intent.md
+    prompt_auto: prompts/02_identify_intent.auto.md
+    # 落盘到 intent/02-intent-local.md（本地不提交）；AI 先写临时 result，引擎再持久化。
+    output: 02-intent-local.md
     inputs:
       - doc: 01-requirements.md
-      - state: requirement_type
-      - state: requirement_summary
-      - state: change_scope
-      - state: affected_modules
-      - state: compatibility_risk
 
   design_test_cases:
     name: 设计测试用例
@@ -57,17 +52,19 @@ nodes:
       - state: change_scope
       - state: affected_modules
 
-  review_plan:
-    name: 计划评审
+  # 一次交互会话：写带角色后缀的计划（02-plan-backend.md / 02-plan-front.md / 02-plan-all.md），并在同一份里完成澄清和确认。
+  # output 仍是逻辑名，落盘时按计划角色加后缀。
+  # 用例由主会话按工具拉起后台 subagent 写。design_test_cases 只提供用例 prompt，不单独跑。
+  plan_session:
+    name: 计划与澄清
     tool: claude_code
     mode: interactive
-    prompt: prompts/02_review_plan.md
-    prompt_auto: prompts/02_review_plan.auto.md
-    output: 02-plan-review.md
+    prompt: prompts/02_plan_session.md
+    prompt_auto: prompts/02_plan_session.auto.md
+    output: 02-plan.md
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-plan-review.md
       - state: requirement_type
       - state: requirement_summary
       - state: change_scope
@@ -84,7 +81,6 @@ nodes:
     inputs:
       - doc: 01-requirements.md
       - doc: 02-plan.md
-      - doc: 02-plan-review.md
       - doc: 03-tasks.md
       - state: requirement_type
       - state: change_scope

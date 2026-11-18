@@ -1,42 +1,98 @@
 """通用节点执行器 — 每个节点是独立 agent，读取配置后执行。"""
 
 import logging
+import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
+from ..agents.base import AIToolResult
+from ..agents.prompt_file import TEMP_PROMPT_DIR, save_node_prompt
 from ..agents.registry import get_ai_tool
+from ..agents.subagent_delegation import (
+    testcase_delegation,
+    testcase_ready_note,
+)
 from ..config_loader import NodeConfig, NodeScoringRules, WorkflowConfig
-from ..requirement_dir import resolve_app_root, resolve_docs_path
-from ..ai_rules_loader import build_ai_rules_prompt
+from ..requirement_dir import (
+    path_for_state,
+    resolve_app_root,
+    resolve_docs_path,
+    resolve_project_docs_dir,
+)
+from ..ai_rules_loader import (
+    build_ai_rules_prompt,
+    materialize_rule_references,
+    restrict_rules_to_involved,
+    rule_catalog_mode,
+)
 from ..parsers.clarification_parser import parse_clarification_checklist
 from ..parsers.approval_parser import (
+    parse_intent_approval,
+    parse_intent_metadata,
     parse_plan_approval,
+    parse_plan_metadata,
+    parse_plan_role,
     parse_requirement_approval,
-    parse_review_plan_approval,
     parse_tasks_approval,
+    parse_ai_review_approval,
+    parse_commit_approval,
+    parse_implementation_approval,
     parse_test_cases_approval,
+    parse_test_report_approval,
 )
-from ..parsers.requirement_parser import (
-    RequirementMetadata,
-    format_role_scope,
-    parse_requirement_metadata,
-)
+from ..parsers.requirement_parser import RequirementMetadata, parse_requirement_metadata
 from ..parsers.test_report_parser import parse_test_passed, verify_report_ready
 from ..parsers.workflow_status_parser import WorkflowStatus, upsert_workflow_status
+from ..router import persist_intent
+from ..role_output import (
+    ROLE_SCOPED_OUTPUTS,
+    find_output,
+    format_role_scope,
+    output_hint,
+    role_from_filename,
+    write_output_path,
+)
 from ..phase_gate import (
     PHASE_CONFIGS,
     get_phase_config,
     phase_complete,
     phase_content_ready,
+    plan_session_complete,
     resolve_doc_path,
-    review_plan_complete,
 )
 from ..state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
 
 EMPTY_SCORING_HINT = "（本节点未配置 suggestion_confidence 把握规则；按你的整体把握给 0-1 浮点，无法评估写 0.0）"
+
+
+def _hydrate_involved_repos(
+    docs_dir: Path, state: DevWorkflowState
+) -> dict[str, list[str]]:
+    """state 里已有涉及仓库（含意图确认的空列表）就不动。没有则从本次角色的计划读一次。"""
+    if state.get("involved_repos") is not None:
+        return {}
+    role = str(state.get("delivery_role") or "")
+    if role in ("", "unknown"):
+        return {}
+    plan_path = find_output(docs_dir, "02-plan.md", role)
+    if plan_path is None:
+        return {}
+    present, repos = parse_plan_metadata(plan_path.read_text(encoding="utf-8"))
+    if not present:
+        return {}
+    return {"involved_repos": repos}
+
+
+def _hydrate_delivery_role(
+    docs_dir: Path, state: DevWorkflowState
+) -> dict[str, object]:
+    """角色由意图节点或启动时的本地 intent 缓存写入 state，不从别的角色的计划里取。"""
+    del docs_dir, state
+    return {}
 
 
 def _format_rule_list(rules: list, label: str) -> list[str]:
@@ -81,8 +137,18 @@ def build_suggestion_confidence_prompt(
     return "\n".join(lines)
 
 _PHASE_NODE_IDS = frozenset(PHASE_CONFIGS.keys())
-_CODE_WORK_NODES = frozenset(
-    {"implement_code", "verify_tests", "ai_review", "commit_code"}
+# 工作目录用启动终端所在的业务项目根
+_APP_ROOT_NODES = frozenset(
+    {
+        "analyze_requirements",
+        "identify_intent",
+        "plan_session",
+        "design_test_cases",
+        "implement_code",
+        "verify_tests",
+        "ai_review",
+        "commit_code",
+    }
 )
 
 
@@ -97,6 +163,11 @@ class NodeRunner:
         node_cfg = self.workflow_config.nodes[node_id]
         docs_dir = self._resolve_docs_dir(state)
 
+        hydrated = _hydrate_involved_repos(docs_dir, state)
+        hydrated.update(_hydrate_delivery_role(docs_dir, state))
+        if hydrated:
+            state = {**state, **hydrated}
+
         auto = bool(state.get("auto"))
         prompt_rel = node_cfg.resolve_prompt_file(auto)
         prompt_template = self._load_prompt(prompt_rel)
@@ -108,10 +179,14 @@ class NodeRunner:
             prompt_rel,
             "无人值守" if auto else "人工介入",
         )
+        if node_id == "identify_intent":
+            return self._run_identify_intent(node_cfg, docs_dir, prompt)
 
         tool = get_ai_tool(node_cfg.tool)
         agent_cwd = self._agent_cwd(node_id)
-        output_path = docs_dir / node_cfg.output_file
+        output_path = write_output_path(
+            docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         interactive = node_cfg.mode == "interactive"
@@ -185,21 +260,30 @@ class NodeRunner:
                 docs_dir, output_path, node_id, result
             )
 
+        role_now = str(state.get("delivery_role") or "")
+        found_output = find_output(
+            docs_dir,
+            node_cfg.output_file,
+            role_now if role_now and role_now != "unknown" else None,
+        )
+        if found_output is not None:
+            output_path = found_output
+
         updates: DevWorkflowState = {
             "current_node": node_id,
             "node_outputs": {
-                node_id: str(
-                    output_path.relative_to(
-                        resolve_app_root(
-                            self.project_root,
-                            state.get("app_root") or self.workflow_config.app_root,
-                        )
-                    )
+                node_id: path_for_state(
+                    output_path,
+                    resolve_app_root(
+                        self.project_root,
+                        state.get("app_root") or self.workflow_config.app_root,
+                    ),
                 )
             },
             "completed_nodes": [node_id],
         }
-        updates.update(self._parse_node_outputs(node_id, content, docs_dir))
+        updates.update(hydrated)
+        updates.update(self._parse_node_outputs(node_id, content, docs_dir, state, output_path))
 
         merged_state = {**state, **updates}
         workflow_status = self._build_workflow_status(
@@ -246,8 +330,8 @@ class NodeRunner:
     ) -> tuple[str, object]:
         cfg = get_phase_config(node_id)
         if cfg:
-            final = docs_dir / cfg.final_file
-            if final.exists():
+            final = find_output(docs_dir, cfg.final_file)
+            if final is not None:
                 text = final.read_text(encoding="utf-8").strip()
                 if text:
                     if not result.success:
@@ -278,7 +362,9 @@ class NodeRunner:
         min_chars = cfg.min_body_chars if cfg else 120
         candidates: list[Path] = []
         if cfg:
-            candidates.append(docs_dir / cfg.final_file)
+            found = find_output(docs_dir, cfg.final_file)
+            if found is not None:
+                candidates.append(found)
         if output_path not in candidates:
             candidates.append(output_path)
 
@@ -316,8 +402,8 @@ class NodeRunner:
         cfg = get_phase_config(node_cfg.node_id)
         target = output_path
         if cfg:
-            final_path = docs_dir / cfg.final_file
-            if final_path.exists():
+            final_path = find_output(docs_dir, cfg.final_file)
+            if final_path is not None:
                 target = final_path
 
         if target.exists() and body_content.strip():
@@ -330,6 +416,8 @@ class NodeRunner:
             target.write_text(upsert_workflow_status(body, status), encoding="utf-8")
             return
 
+        if not _can_create_output(node_cfg.output_file, output_path):
+            return
         body = self._strip_existing_status(body_content)
         if not body.strip():
             return
@@ -338,14 +426,30 @@ class NodeRunner:
         output_path.write_text(upsert_workflow_status(body, status), encoding="utf-8")
 
     def _parse_node_outputs(
-        self, node_id: str, content: str, docs_dir: Path
+        self,
+        node_id: str,
+        content: str,
+        docs_dir: Path,
+        state: DevWorkflowState,
+        output_path: Path | None = None,
     ) -> DevWorkflowState:
         updates: DevWorkflowState = {}
 
         cfg = get_phase_config(node_id)
+        role = str(state.get("delivery_role") or "")
+        if output_path is not None and role_from_filename(output_path.name):
+            role = role_from_filename(output_path.name) or role
         if cfg:
-            final_path = docs_dir / cfg.final_file
-            if final_path.exists():
+            final_path = (
+                output_path
+                if output_path is not None and output_path.exists()
+                else find_output(
+                    docs_dir,
+                    cfg.final_file,
+                    role if role and role != "unknown" else None,
+                )
+            )
+            if final_path is not None and final_path.exists():
                 final_content = final_path.read_text(encoding="utf-8")
                 if node_id == "analyze_requirements":
                     metadata = parse_requirement_metadata(final_content)
@@ -353,28 +457,143 @@ class NodeRunner:
                         updates.update(metadata.to_state_updates())
                 approval_parser = {
                     "analyze_requirements": parse_requirement_approval,
-                    "create_plan": parse_plan_approval,
                     "design_test_cases": parse_test_cases_approval,
-                    "review_plan": parse_review_plan_approval,
+                    "plan_session": parse_plan_approval,
                     "split_tasks": parse_tasks_approval,
+                    "implement_code": parse_implementation_approval,
+                    "verify_tests": parse_test_report_approval,
+                    "ai_review": parse_ai_review_approval,
+                    "commit_code": parse_commit_approval,
                 }[node_id]
                 state_key = cfg.approval_state_key if cfg else f"{node_id}_approved"
                 updates.update(approval_parser(final_content).to_state(state_key))
+                if node_id == "plan_session":
+                    # 角色 / 涉及仓库 / 分支以意图确认为准，只透传，不用计划文件回写覆盖。
+                    if state.get("involved_repos") is None:
+                        present, repos = parse_plan_metadata(final_content)
+                        if present:
+                            updates["involved_repos"] = repos
+                    if str(state.get("delivery_role") or "") in ("", "unknown"):
+                        parsed, blocks, basis = parse_plan_role(
+                            final_content, final_path.name
+                        )
+                        if parsed != "unknown":
+                            updates["delivery_role"] = parsed
+                            updates["delivery_blocks"] = blocks
+                            updates["role_basis"] = basis
 
                 checklist = parse_clarification_checklist(final_content)
                 if checklist.items:
                     updates.update(checklist.to_state())
 
         if node_id == "verify_tests":
-            report_path = docs_dir / "05-test-report.md"
+            report_role = str(updates.get("delivery_role") or state.get("delivery_role") or "")
+            report_path = find_output(
+                docs_dir,
+                "05-test-report.md",
+                report_role if report_role and report_role != "unknown" else None,
+            )
             report = (
                 report_path.read_text(encoding="utf-8")
-                if report_path.exists()
+                if report_path is not None
                 else content
             )
             updates["test_passed"] = parse_test_passed(report)
 
         return updates
+
+    def _run_identify_intent(
+        self,
+        node_cfg: NodeConfig,
+        docs_dir: Path,
+        prompt: str,
+    ) -> DevWorkflowState:
+        """扫仓库并请用户确认。结论写入 intent/（本地不提交）并进入本次 state。"""
+        result_path = _intent_result_path(docs_dir)
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        if result_path.exists():
+            result_path.unlink()
+        started = time.time()
+
+        tool = get_ai_tool(node_cfg.tool)
+        agent_cwd = self._agent_cwd(node_cfg.node_id)
+        configured_model = (node_cfg.model or "").strip()
+        effective_model = "" if node_cfg.tool == "echo" and configured_model else configured_model
+        interactive = node_cfg.mode == "interactive"
+        logger.info(
+            "进入节点 [%s] (%s) tool=%s model=%s mode=%s",
+            node_cfg.name,
+            node_cfg.node_id,
+            node_cfg.tool,
+            effective_model or "(tool默认)",
+            "interactive" if interactive else "headless",
+        )
+        if interactive and not sys.stdin.isatty():
+            logger.warning("当前非 TTY 终端，交互模式可能无法正常输入")
+
+        def confirmed() -> bool:
+            return bool(_read_confirmed_intent(result_path, started))
+
+        if interactive:
+            result = tool.run_interactive(
+                prompt=prompt,
+                cwd=str(agent_cwd),
+                completion_check=confirmed,
+                node_id=node_cfg.node_id,
+                prompt_dir=str(docs_dir),
+                model=effective_model or None,
+            )
+            if not confirmed():
+                logger.warning("节点 [%s] 交互已结束，但本次角色还未确认", node_cfg.name)
+        else:
+            result = tool.run(
+                prompt=prompt,
+                cwd=str(agent_cwd),
+                node_id=node_cfg.node_id,
+                prompt_dir=str(docs_dir),
+                model=effective_model or None,
+            )
+
+        text = _read_confirmed_intent(result_path, started)
+        if not text and result.content.strip():
+            text = _confirmed_intent_text(result.content)
+        if result_path.exists():
+            result_path.unlink()
+
+        if not text:
+            return {
+                "current_node": node_cfg.node_id,
+                "intent_approved": False,
+                "last_error": result.message or "意图未确认",
+            }
+
+        meta = parse_intent_metadata(text)
+        branch = meta.git_branch.strip()
+        if not branch:
+            return {
+                "current_node": node_cfg.node_id,
+                "intent_approved": False,
+                "last_error": "意图未写入 git_branch",
+            }
+        persist_intent(docs_dir, text)
+        logger.info(
+            "意图已确认：role=%s repos=%s branch=%s（已落盘 intent/，本地不提交）",
+            meta.delivery_role,
+            meta.involved_repos,
+            branch,
+        )
+        return {
+            "current_node": node_cfg.node_id,
+            "completed_nodes": [node_cfg.node_id],
+            "delivery_role": meta.delivery_role,
+            "delivery_blocks": list(meta.delivery_blocks or []),
+            "role_basis": meta.role_basis,
+            "involved_repos": list(meta.involved_repos or []),
+            "git_branch": branch,
+            "git_base": meta.git_base,
+            "intent_approved": True,
+            "last_error": None,
+        }
 
     def _build_completion_check(
         self,
@@ -384,8 +603,8 @@ class NodeRunner:
         output_path: Path,
     ):
         if node_id in _PHASE_NODE_IDS:
-            if node_id == "review_plan":
-                return lambda: review_plan_complete(docs_dir, state)
+            if node_id == "plan_session":
+                return lambda: plan_session_complete(docs_dir, state)
             return lambda: phase_complete(docs_dir, node_id, state)
         return lambda: _node_output_complete(node_id, output_path)
 
@@ -403,7 +622,8 @@ class NodeRunner:
         cfg = get_phase_config(node_cfg.node_id)
         paths: list[Path] = [output_path]
         if cfg:
-            paths = [docs_dir / cfg.final_file]
+            found = find_output(docs_dir, cfg.final_file)
+            paths = [found] if found is not None else [output_path]
 
         for path in paths:
             if not path.exists():
@@ -418,8 +638,10 @@ class NodeRunner:
 
         if (
             cfg
+            and found is None
             and not output_path.exists()
             and body_content.strip()
+            and _can_create_output(node_cfg.output_file, output_path)
         ):
             wrapped = self._wrap_output(
                 node_cfg, self._strip_existing_status(body_content), result
@@ -452,13 +674,13 @@ class NodeRunner:
     ) -> WorkflowStatus:
         pending = int(state.get("clarification_pending_count") or 0)
         all_resolved = bool(state.get("clarification_resolved", pending == 0))
-        skip = bool(state.get("skip_clarification"))
+        auto_mode = bool(state.get("auto"))
 
         phase_labels = {
             "analyze_requirements": "requirements",
-            "create_plan": "plan",
+            "identify_intent": "intent",
             "design_test_cases": "test_cases",
-            "review_plan": "plan_review",
+            "plan_session": "plan",
             "split_tasks": "tasks",
             "implement_code": "implement",
             "verify_tests": "verify",
@@ -468,26 +690,21 @@ class NodeRunner:
         phase = phase_labels.get(node_id, node_id)
         next_node = ""
 
-        if node_id in PHASE_CONFIGS:
+        if node_id == "plan_session":
+            ready = plan_session_complete(docs_dir, state)
+            next_node = "split_tasks" if ready else "plan_session"
+        elif node_id in PHASE_CONFIGS:
             cfg = PHASE_CONFIGS[node_id]
             if cfg.requires_approval:
                 ready = phase_complete(docs_dir, node_id, state)
             else:
                 ready = phase_content_ready(docs_dir, node_id, state)
             next_node = cfg.next_node if ready else node_id
-        elif node_id == "implement_code":
-            next_node = "verify_tests"
-        elif node_id == "verify_tests":
-            next_node = "ai_review"
-        elif node_id == "ai_review":
-            next_node = "commit_code"
-        elif node_id == "commit_code":
-            next_node = ""
 
-        if skip and node_id == "analyze_requirements" and phase_complete(
+        if auto_mode and node_id == "analyze_requirements" and phase_complete(
             docs_dir, "analyze_requirements", state
         ):
-            next_node = "parallel_plan_and_tests"
+            next_node = "identify_intent"
 
         test_passed = None
         if node_id == "verify_tests":
@@ -516,13 +733,90 @@ class NodeRunner:
             self.project_root,
             state.get("app_root") or self.workflow_config.app_root,
         )
-        return resolve_docs_path(app_root, docs_dir)
+        return resolve_docs_path(
+            resolve_project_docs_dir(app_root, self.workflow_config.project_docs_dir),
+            docs_dir,
+        )
 
     def _agent_cwd(self, node_id: str) -> Path:
-        """实现/测试节点在应用项目根执行；其余在本仓库（编排引擎）根目录。"""
-        if node_id in _CODE_WORK_NODES:
+        """这些节点在启动终端所在的业务项目根执行；其余在编排引擎根目录。"""
+        if node_id in _APP_ROOT_NODES:
             return self.app_root
         return self.project_root
+
+    def adopt_existing_output(self, node_id: str, state: DevWorkflowState) -> DevWorkflowState:
+        """subagent 已经把文件写好时，补审批解析和 Workflow 状态，不再起 CLI。"""
+        node_cfg = self.workflow_config.nodes[node_id]
+        docs_dir = self._resolve_docs_dir(state)
+        output_path = write_output_path(
+            docs_dir, node_cfg.output_file, str(state.get("delivery_role") or "")
+        )
+        if not phase_content_ready(docs_dir, node_id, state):
+            return {"last_error": f"{node_id} 产出未就绪（{output_path}）"}
+
+        content = output_path.read_text(encoding="utf-8")
+        app_root = resolve_app_root(
+            self.project_root,
+            state.get("app_root") or self.workflow_config.app_root,
+        )
+        rel = path_for_state(output_path, app_root)
+        updates: DevWorkflowState = {
+            "current_node": node_id,
+            "node_outputs": {node_id: rel},
+            "completed_nodes": [node_id],
+        }
+        updates.update(self._parse_node_outputs(node_id, content, docs_dir, state, output_path))
+        merged = {**state, **updates}
+        status = self._build_workflow_status(
+            node_id, merged, docs_dir, success=True
+        )
+        result = AIToolResult(
+            content=content,
+            tool_name=node_cfg.tool,
+            success=True,
+            message="subagent 已写入",
+        )
+        self._finalize_headless_outputs(
+            docs_dir,
+            node_cfg,
+            output_path=output_path,
+            body_content=content,
+            result=result,
+            status=status,
+        )
+        return updates
+
+    def _testcase_delegation_block(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_dir(state)
+        # 与主提示词一致：路径相对 temp-prompts/（提示词文件所在目录）
+        anchor = docs_dir / TEMP_PROMPT_DIR
+        agent_cwd = self._agent_cwd("design_test_cases")
+        output_path = write_output_path(
+            docs_dir, "02-test-cases.md", str(state.get("delivery_role") or "")
+        )
+        output_label = _prompt_rel_path(output_path, anchor)
+        if phase_content_ready(docs_dir, "design_test_cases", state):
+            return testcase_ready_note(output_label)
+
+        tool_name = self.workflow_config.nodes["plan_session"].tool
+        test_prompt = self._render_node_prompt("design_test_cases", state)
+        prompt_file = save_node_prompt(
+            test_prompt,
+            str(agent_cwd),
+            node_id="design_test_cases",
+            prompt_dir=str(docs_dir),
+        )
+        prompt_rel = _prompt_rel_path(prompt_file, Path(agent_cwd))
+        return testcase_delegation(
+            tool_name, prompt_file, output_label, prompt_display=prompt_rel
+        )
+
+    def _render_node_prompt(self, node_id: str, state: DevWorkflowState) -> str:
+        node_cfg = self.workflow_config.nodes[node_id]
+        docs_dir = self._resolve_docs_dir(state)
+        auto = bool(state.get("auto"))
+        template = self._load_prompt(node_cfg.resolve_prompt_file(auto))
+        return self._render_prompt(template, self._build_context(node_cfg, state, docs_dir))
 
     def _load_prompt(self, prompt_file: str) -> str:
         path = self.project_root / prompt_file
@@ -535,47 +829,74 @@ class NodeRunner:
     def _build_context(
         self, node_cfg: NodeConfig, state: DevWorkflowState, docs_dir: Path
     ) -> dict[str, str]:
+        role = str(state.get("delivery_role") or "")
+        app_root_setting = state.get("app_root") or self.workflow_config.app_root
+        app_root = resolve_app_root(self.project_root, app_root_setting)
+        project_docs = resolve_project_docs_dir(
+            app_root,
+            self.workflow_config.project_docs_dir,
+        )
+        # 文档路径相对「本提示词所在目录 temp-prompts/」，Agent 按提示词文件目录解析，勿按 cwd
+        cfg = get_phase_config(node_cfg.node_id)
+        anchor_dir = docs_dir / TEMP_PROMPT_DIR
+        anchor_dir.mkdir(parents=True, exist_ok=True)
+
+        def docs_rel(path: Path | str) -> str:
+            return _prompt_rel_path(path, anchor_dir)
+
+        def hint(logical: str, role_name: str | None = None) -> str:
+            raw = output_hint(docs_dir, logical, role_name if role_name is not None else role)
+            # output_hint 角色未定时可能是「a、b、c」多个候选
+            return "、".join(docs_rel(part) for part in raw.split("、") if part.strip())
+
+        original_req = docs_dir / "00-requirement.md"
+        if original_req.is_file():
+            requirement_ref = f"`{docs_rel(original_req)}`"
+        else:
+            requirement_ref = state.get("requirement", "")
+
         context: dict[str, str] = {
-            "requirement": state.get("requirement", ""),
+            "requirement": requirement_ref,
             "project_root": str(self.project_root),
-            "app_root": str(
-                resolve_app_root(
-                    self.project_root,
-                    state.get("app_root") or self.workflow_config.app_root,
-                )
-            ),
-            "docs_dir": str(docs_dir),
-            "output_path": str(docs_dir / node_cfg.output_file),
-            "node_output_path": str(docs_dir / node_cfg.output_file),
-            "skip_clarification_hint": (
-                "是 — 跳过与用户澄清，初稿无 pending 时直接输出定稿。"
-                if state.get("skip_clarification")
-                else "否 — 初稿有待澄清/待决策项时，必须在会话中与用户确认。"
-            ),
+            "app_root": str(app_root),
+            # 相对本提示词所在 temp-prompts/；Agent 按提示词目录解析
+            "project_docs_dir": docs_rel(project_docs),
+            "docs_dir": docs_rel(docs_dir),
+            "output_path": hint(node_cfg.output_file),
+            "node_output_path": hint(node_cfg.output_file),
+            "output_plan": hint("02-plan.md"),
+            "output_test_cases": hint("02-test-cases.md"),
+            "output_tasks": hint("03-tasks.md"),
+            "output_implementation": hint("04-implementation.md"),
+            "output_test_report": hint("05-test-report.md"),
+            "output_ai_review": hint("06-ai-review.md"),
+            "output_commit": hint("07-commit.md"),
+            "git_branch": str(state.get("git_branch") or ""),
+            "git_base": str(state.get("git_base") or ""),
+            "requirement_slug": str(state.get("requirement_slug") or docs_dir.name),
+            "requirement_type": str(state.get("requirement_type") or ""),
             "role_scope": format_role_scope(
-                str(state.get("delivery_role") or ""),
+                role,
                 list(state.get("delivery_blocks") or []),
                 str(state.get("role_basis") or ""),
             ),
         }
 
-        cfg = get_phase_config(node_cfg.node_id)
         if cfg:
-            context["final_output_path"] = str(docs_dir / cfg.final_file)
+            context["final_output_path"] = hint(cfg.final_file)
         else:
-            context["final_output_path"] = str(docs_dir / "01-requirements.md")
+            context["final_output_path"] = docs_rel(docs_dir / "01-requirements.md")
+        context["intent_result_path"] = docs_rel(_intent_result_path(docs_dir))
 
         for inp in node_cfg.inputs:
             if inp.kind == "state":
                 context[inp.key] = self._format_state_value(state.get(inp.key), inp.key)
             elif inp.kind == "doc":
-                doc_path = resolve_doc_path(docs_dir, inp.key)
-                context[inp.key.replace(".md", "").replace("-", "_")] = (
-                    doc_path.read_text(encoding="utf-8") if doc_path.exists() else ""
-                )
-                context[f"doc_{inp.key}"] = context[
-                    inp.key.replace(".md", "").replace("-", "_")
-                ]
+                doc_path = resolve_doc_path(docs_dir, inp.key, role)
+                doc_ref = _format_doc_ref(doc_path, anchor_dir)
+                slug = inp.key.replace(".md", "").replace("-", "_")
+                context[slug] = doc_ref
+                context[f"doc_{inp.key}"] = doc_ref
 
         if state.get("requirement_type"):
             meta = RequirementMetadata(
@@ -596,11 +917,23 @@ class NodeRunner:
             )
             context.update(meta.to_context())
 
+        context.update(_intent_and_repo_context(state))
+        involved_repos = state.get("involved_repos")
+        metadata_present = involved_repos is not None
+        references = materialize_rule_references(
+            docs_dir,
+            project_docs,
+            list(node_cfg.extend_rules),
+            involved_repos=list(involved_repos or []),
+            restrict_to_involved=restrict_rules_to_involved(
+                node_cfg.node_id, metadata_present
+            ),
+        )
         context["ai_rules"] = build_ai_rules_prompt(
-            self.project_root,
-            node_cfg.extend_rules,
-            rules_dir=self.workflow_config.ai_rules_dir,
-            app_root=state.get("app_root") or self.workflow_config.app_root,
+            references,
+            mode=rule_catalog_mode(node_cfg.node_id, metadata_present),
+            involved_repos=list(involved_repos or []),
+            project_docs_dir=docs_rel(project_docs),
         )
 
         context["recommendation_threshold"] = str(
@@ -611,6 +944,8 @@ class NodeRunner:
             self.workflow_config.suggestion_confidence_rules,
             node_cfg.node_id,
         )
+        if node_cfg.node_id == "plan_session":
+            context["subagent_delegation"] = self._testcase_delegation_block(state)
 
         return context
 
@@ -667,17 +1002,84 @@ class NodeRunner:
         header += "\n---\n\n"
         return header + content
 
+def _prompt_rel_path(path: Path | str, base: Path) -> str:
+    """相对当前文档所在目录（可含 ..），例如 ../requirements/01-requirements.md。"""
+    target = Path(path).expanduser().resolve()
+    root = base.expanduser().resolve()
+    return os.path.relpath(str(target), str(root)).replace("\\", "/")
+
+
+def _format_doc_ref(doc_path: Path, base: Path) -> str:
+    """已有文档只给相对当前产出目录的路径，不内嵌正文；不存在则标明。"""
+    if not doc_path.is_file():
+        return "（尚无此文件）"
+    return f"`{_prompt_rel_path(doc_path, base)}`"
+
+
+def _intent_result_path(docs_dir: Path) -> Path:
+    return docs_dir / "temp-prompts" / "identify_intent.result.md"
+
+
+def _intent_and_repo_context(state: DevWorkflowState) -> dict[str, str]:
+    """计划提示词用的已确认分支与仓库列表。分支名不由引擎推荐。"""
+    repos = state.get("involved_repos")
+    if repos is None:
+        repos_text = "（尚未确认）"
+        repos_yaml = "  []"
+    elif not repos:
+        repos_text = "（无）"
+        repos_yaml = "  []"
+    else:
+        repos_text = "、".join(str(item) for item in repos)
+        repos_yaml = "\n".join(f"  - {item}" for item in repos)
+
+    return {
+        "involved_repos_text": repos_text,
+        "involved_repos_yaml": repos_yaml,
+        "git_branch": str(state.get("git_branch") or ""),
+        "git_base": str(state.get("git_base") or ""),
+    }
+
+
+def _confirmed_intent_text(content: str) -> str:
+    if not parse_intent_approval(content).is_approved:
+        return ""
+    meta = parse_intent_metadata(content)
+    if meta.delivery_role not in ("backend", "frontend", "both"):
+        return ""
+    if meta.involved_repos is None:
+        return ""
+    if not meta.git_branch.strip():
+        return ""
+    return content
+
+
+def _read_confirmed_intent(path: Path, started: float) -> str:
+    if not path.is_file():
+        return ""
+    if path.stat().st_mtime + 1 < started:
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return _confirmed_intent_text(text)
+
+
+def _can_create_output(logical: str, path: Path) -> bool:
+    """角色文件必须带后缀。角色还没定时，不要另写一份不带后缀的文件。"""
+    if logical not in ROLE_SCOPED_OUTPUTS:
+        return True
+    return role_from_filename(path.name) is not None
+
+
 def _node_output_complete(node_id: str, output_path: Path, *, min_chars: int = 120) -> bool:
     if not output_path.exists():
         return False
     content = output_path.read_text(encoding="utf-8")
     body = content.split("## Workflow 状态", 1)[0].strip()
+    if node_id == "verify_tests":
+        return verify_report_ready(body)
     if len(body) < min_chars:
         return False
-    if node_id == "verify_tests":
-        if any(output_path.parent.glob("*.png")) or any(
-            output_path.parent.glob("*.jpg")
-        ):
-            return False
-        return verify_report_ready(body)
     return True

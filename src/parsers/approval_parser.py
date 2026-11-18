@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from ..role_output import blocks_for_role, role_fields, role_from_filename
+
 APPROVAL_STATUSES = frozenset({"pending", "approved"})
 
 
@@ -23,6 +25,15 @@ class Approval:
 
     def to_state(self, state_key: str = "requirement_approved") -> dict[str, Any]:
         return {state_key: self.is_approved}
+
+
+def read_approval_status(content: str, block_name: str) -> str | None:
+    """返回确认块里的 status。块不存在时返回 None，不把缺块当成 pending。"""
+    raw = _extract_yaml_block(content, block_name)
+    if not raw:
+        return None
+    status = str(raw.get("status", "")).strip().lower()
+    return status or None
 
 
 def parse_approval(content: str, block_name: str) -> Approval:
@@ -49,12 +60,123 @@ def parse_plan_approval(content: str) -> Approval:
     return parse_approval(content, "plan_approval")
 
 
+def parse_plan_metadata(content: str) -> tuple[bool, list[str]]:
+    """读取计划里的涉及仓库。块不存在时第一项为 False。"""
+    raw = _extract_yaml_block(content, "plan_metadata")
+    if raw is None:
+        return False, []
+    repos = raw.get("involved_repos") or []
+    if isinstance(repos, str):
+        repos = [repos]
+    if not isinstance(repos, list):
+        return True, []
+    names: list[str] = []
+    for item in repos:
+        name = str(item).strip()
+        if name and name not in names:
+            names.append(name)
+    return True, names
+
+
+def parse_plan_git_branch(content: str) -> str:
+    """读取计划里已定的工作分支。没有就返回空字符串。"""
+    raw = _extract_yaml_block(content, "plan_metadata")
+    if raw is None:
+        return ""
+    return str(raw.get("git_branch") or "").strip()
+
+
+def parse_intent_approval(content: str) -> Approval:
+    return parse_approval(content, "intent_approval")
+
+
+@dataclass
+class IntentMetadata:
+    delivery_role: str = "unknown"
+    delivery_blocks: list[str] | None = None
+    role_basis: str = ""
+    involved_repos: list[str] | None = None
+    git_branch: str = ""
+    git_base: str = ""
+
+    def __post_init__(self) -> None:
+        if self.delivery_blocks is None:
+            self.delivery_blocks = []
+
+
+def parse_intent_metadata(content: str) -> IntentMetadata:
+    """读取意图确认里的角色、涉及仓库和工作分支。"""
+    raw = _extract_yaml_block(content, "intent_metadata") or {}
+    fields = role_fields(
+        raw.get("delivery_role"),
+        raw.get("delivery_blocks"),
+        raw.get("role_basis"),
+    )
+    repos_raw = raw.get("involved_repos")
+    repos: list[str] | None
+    if repos_raw is None and "involved_repos" not in raw:
+        repos = None
+    else:
+        if isinstance(repos_raw, str):
+            repos_raw = [repos_raw]
+        if not isinstance(repos_raw, list):
+            repos = []
+        else:
+            repos = []
+            for item in repos_raw:
+                name = str(item).strip()
+                if name and name not in repos:
+                    repos.append(name)
+    return IntentMetadata(
+        delivery_role=fields["delivery_role"],
+        delivery_blocks=list(fields["delivery_blocks"]),
+        role_basis=fields["role_basis"],
+        involved_repos=repos,
+        git_branch=str(raw.get("git_branch") or "").strip(),
+        git_base=str(raw.get("git_base") or "").strip(),
+    )
+
+
+def parse_plan_role(content: str, filename: str = "") -> tuple[str, list[str], str]:
+    """意图或计划里的前后端角色。元数据优先，没有时用文件名后缀。"""
+    raw = (
+        _extract_yaml_block(content, "intent_metadata")
+        or _extract_yaml_block(content, "plan_metadata")
+        or {}
+    )
+    fields = role_fields(
+        raw.get("delivery_role"),
+        raw.get("delivery_blocks"),
+        raw.get("role_basis"),
+    )
+    role = fields["delivery_role"]
+    blocks = list(fields["delivery_blocks"])
+    basis = fields["role_basis"]
+    if role == "unknown":
+        from_name = role_from_filename(filename)
+        if from_name:
+            return from_name, blocks_for_role(from_name), basis
+    return role, blocks, basis
+
+
 def parse_test_cases_approval(content: str) -> Approval:
     return parse_approval(content, "test_cases_approval")
 
 
-def parse_review_plan_approval(content: str) -> Approval:
-    return parse_approval(content, "review_plan_approval")
+def parse_test_report_approval(content: str) -> Approval:
+    return parse_approval(content, "test_report_approval")
+
+
+def parse_implementation_approval(content: str) -> Approval:
+    return parse_approval(content, "implementation_approval")
+
+
+def parse_ai_review_approval(content: str) -> Approval:
+    return parse_approval(content, "ai_review_approval")
+
+
+def parse_commit_approval(content: str) -> Approval:
+    return parse_approval(content, "commit_approval")
 
 
 def parse_tasks_approval(content: str) -> Approval:

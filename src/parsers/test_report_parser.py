@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .approval_parser import read_approval_status
 from .workflow_status_parser import parse_workflow_status
 
 STATUS_HEADING = "## Workflow 状态"
@@ -36,27 +37,15 @@ def has_test_result_table(content: str) -> bool:
     return last_result_table(content) is not None
 
 
-_VERIFY_SECTION_MARKERS = (
-    ("执行", ("执行命令", "执行环境", "执行概述")),
-    ("单元", ("单元测试", "单元")),
-    ("API", ("API 测试", "API")),
-    ("E2E", ("E2E", "浏览器")),
-    ("问题", ("问题与建议", "问题")),
-    ("追溯", ("测试方法", "用例追溯", "追溯")),
-)
-
-
 def verify_report_ready(content: str) -> bool:
-    """报告须有完整章节 + 用例结果表。"""
-    body = _strip_workflow_status(content).strip()
-    if len(body) < 1800:
+    """阶段 5 定稿完成：``test_report_approval.status == approved``，且有用例结果表。
+
+    引擎以此自动退出交互 CLI 并进入下一节点；不再用字数/章节启发式。
+    """
+    body = _strip_workflow_status(content)
+    if read_approval_status(body, "test_report_approval") != "approved":
         return False
-    if not has_test_result_table(body):
-        return False
-    for _name, aliases in _VERIFY_SECTION_MARKERS:
-        if not any(alias in body for alias in aliases):
-            return False
-    return True
+    return has_test_result_table(body)
 
 
 def last_result_table(content: str) -> list[list[str]] | None:

@@ -35,7 +35,7 @@ class ClaudeCodeTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        launch = launch_read_prompt(prompt_file, cwd=cwd)
         model_flags = self.model_cli_flags(model)
         for binary in ("claude", "claude-code"):
             cmd = [binary, "--print", *_PERMISSION_FLAGS, *model_flags, launch]
@@ -86,7 +86,7 @@ class ClaudeCodeTool(AITool):
         prompt_file = save_node_prompt(
             prompt, cwd, node_id=node_id, prompt_dir=prompt_dir
         )
-        launch = launch_read_prompt(prompt_file)
+        launch = launch_read_prompt(prompt_file, cwd=cwd)
         model_flags = self.model_cli_flags(model)
         for binary in ("claude", "claude-code"):
             cmd = [binary, *_PERMISSION_FLAGS, *model_flags, launch]

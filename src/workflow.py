@@ -1,7 +1,6 @@
 """LangGraph workflow 编排 — 节点与边在代码中固定定义。"""
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from langgraph.graph import END, StateGraph
@@ -9,24 +8,30 @@ from langgraph.graph import END, StateGraph
 from .config_loader import load_workflow_config
 from .nodes.node_runner import NodeRunner
 from .phase_gate import (
-    plan_and_tests_content_ready,
     phase_complete,
+    phase_content_ready,
+    plan_session_complete,
     requirements_complete,
-    review_plan_complete,
 )
 from .requirement_dir import (
+    path_for_state,
     resolve_app_root,
+    resolve_project_docs_dir,
     resolve_docs_path,
     resolve_requirement_docs_dir,
     save_original_requirement,
 )
-from .router import determine_start_node, is_workflow_complete, restore_state_from_docs
+from .router import (
+    clear_intent_cache,
+    determine_start_node,
+    is_workflow_complete,
+    load_cached_intent,
+    restore_state_from_docs,
+    resume_node,
+)
 from .state import DevWorkflowState
 
 logger = logging.getLogger(__name__)
-
-_PARALLEL_BRANCHES = ("create_plan", "design_test_cases")
-
 
 class DevWorkflow:
     def __init__(self, project_root: Path, config_path: Path | None = None):
@@ -44,33 +49,37 @@ class DevWorkflow:
     def analyze_requirements(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("analyze_requirements", state)
 
-    def parallel_plan_and_tests(self, state: DevWorkflowState) -> DevWorkflowState:
-        """并行 headless：create_plan + design_test_cases（线程池，完成后进入 review）。"""
+    def identify_intent(self, state: DevWorkflowState) -> DevWorkflowState:
+        return self.node_runner.run_node("identify_intent", state)
+
+    def plan_session(self, state: DevWorkflowState) -> DevWorkflowState:
+        """一次交互会话写计划并完成澄清。用例由该工具自己的后台 subagent 写。"""
         docs_dir = self._resolve_docs_path(state)
-        if plan_and_tests_content_ready(docs_dir, state):
-            logger.info("plan 与 test-cases 已就绪，跳过并行生成")
-            return {"current_node": "parallel_plan_and_tests"}
+        if plan_session_complete(docs_dir, state):
+            logger.info("计划已确认且用例已就绪，跳过计划会话")
+            return {"current_node": "plan_session"}
 
-        merged: DevWorkflowState = {}
+        merged = self.node_runner.run_node("plan_session", state)
         errors: list[str] = []
+        if merged.get("last_error"):
+            errors.append(str(merged["last_error"]))
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = {
-                pool.submit(self.node_runner.run_node, node_id, state): node_id
-                for node_id in _PARALLEL_BRANCHES
-            }
-            for future in as_completed(futures):
-                node_id = futures[future]
-                try:
-                    branch_updates = future.result()
-                    merged = self._merge_branch_updates(merged, branch_updates)
-                except Exception as exc:
-                    logger.exception("并行节点 %s 失败", node_id)
-                    errors.append(f"{node_id}: {exc}")
+        adopted = self.node_runner.adopt_existing_output(
+            "design_test_cases", {**state, **merged}
+        )
+        if adopted.get("last_error") and phase_content_ready(
+            docs_dir, "design_test_cases", state
+        ):
+            adopted = {k: v for k, v in adopted.items() if k != "last_error"}
+        merged = self._merge_branch_updates(merged, adopted)
 
+        if not phase_content_ready(docs_dir, "design_test_cases", {**state, **merged}):
+            errors.append("design_test_cases 产出未就绪")
         if errors:
-            merged["last_error"] = "; ".join(errors)
-        merged["current_node"] = "parallel_plan_and_tests"
+            merged["last_error"] = "; ".join(dict.fromkeys(errors))
+        elif "last_error" in merged:
+            merged["last_error"] = None
+        merged["current_node"] = "plan_session"
         return merged
 
     @staticmethod
@@ -90,12 +99,6 @@ class DevWorkflow:
             else:
                 result[key] = value
         return result
-
-    def review_plan(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("review_plan", state)
-
-    def create_plan(self, state: DevWorkflowState) -> DevWorkflowState:
-        return self.node_runner.run_node("create_plan", state)
 
     def split_tasks(self, state: DevWorkflowState) -> DevWorkflowState:
         return self.node_runner.run_node("split_tasks", state)
@@ -118,18 +121,29 @@ class DevWorkflow:
     def _route_after_analyze(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
         if requirements_complete(docs_dir, state):
-            return "parallel_plan_and_tests"
+            return "identify_intent"
         return END
 
-    def _route_after_parallel(self, state: DevWorkflowState) -> str:
+    def _route_after_intent(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
-        if plan_and_tests_content_ready(docs_dir, state):
-            return "review_plan"
-        return END
+        role = str(state.get("delivery_role") or "")
+        if role not in ("backend", "frontend", "both") or not state.get("intent_approved"):
+            return END
+        if not str(state.get("git_branch") or "").strip():
+            return END
+        if state.get("involved_repos") is None:
+            return END
+        if is_workflow_complete(docs_dir, role=role):
+            logger.info("Workflow 已完成（本次角色的 07-commit.md status=completed）")
+            return END
+        nxt = resume_node(docs_dir, role, auto=bool(state.get("auto")))
+        if nxt in ("analyze_requirements", "identify_intent"):
+            return END
+        return nxt
 
-    def _route_after_review(self, state: DevWorkflowState) -> str:
+    def _route_after_plan_session(self, state: DevWorkflowState) -> str:
         docs_dir = self._resolve_docs_path(state)
-        if review_plan_complete(docs_dir, state):
+        if plan_session_complete(docs_dir, state):
             return "split_tasks"
         return END
 
@@ -139,23 +153,50 @@ class DevWorkflow:
             return "implement_code"
         return END
 
+    def _route_after_implement_code(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "implement_code", state):
+            return "verify_tests"
+        return END
+
+    def _route_after_verify_tests(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "verify_tests", state):
+            return "ai_review"
+        return END
+
+    def _route_after_ai_review(self, state: DevWorkflowState) -> str:
+        docs_dir = self._resolve_docs_path(state)
+        if phase_complete(docs_dir, "ai_review", state):
+            return "commit_code"
+        return END
+
+    def _route_after_commit_code(self, state: DevWorkflowState) -> str:
+        # 定稿与否都结束本次图；未定稿续跑会回到 commit_code
+        return END
+
     def _resolve_app_root(self, state: DevWorkflowState | None = None) -> Path:
         if state and state.get("app_root"):
             return resolve_app_root(self.project_root, state["app_root"])
         return resolve_app_root(self.project_root, self.workflow_config.app_root)
 
+    def _content_base(self, state: DevWorkflowState | None = None) -> Path:
+        return resolve_project_docs_dir(
+            self._resolve_app_root(state),
+            self.workflow_config.project_docs_dir,
+        )
+
     def _resolve_docs_path(self, state: DevWorkflowState) -> Path:
         docs_dir = state.get("docs_dir") or self.workflow_config.docs_dir
-        return resolve_docs_path(self._resolve_app_root(state), docs_dir)
+        return resolve_docs_path(self._content_base(state), docs_dir)
 
     def _build_graph(self):
         workflow = StateGraph(DevWorkflowState)
 
         workflow.add_node("route_next", self.route_next)
         workflow.add_node("analyze_requirements", self.analyze_requirements)
-        workflow.add_node("parallel_plan_and_tests", self.parallel_plan_and_tests)
-        workflow.add_node("review_plan", self.review_plan)
-        workflow.add_node("create_plan", self.create_plan)
+        workflow.add_node("identify_intent", self.identify_intent)
+        workflow.add_node("plan_session", self.plan_session)
         workflow.add_node("split_tasks", self.split_tasks)
         workflow.add_node("implement_code", self.implement_code)
         workflow.add_node("verify_tests", self.verify_tests)
@@ -168,9 +209,8 @@ class DevWorkflow:
             self._route_from_start,
             {
                 "analyze_requirements": "analyze_requirements",
-                "parallel_plan_and_tests": "parallel_plan_and_tests",
-                "review_plan": "review_plan",
-                "create_plan": "create_plan",
+                "identify_intent": "identify_intent",
+                "plan_session": "plan_session",
                 "split_tasks": "split_tasks",
                 "implement_code": "implement_code",
                 "verify_tests": "verify_tests",
@@ -182,21 +222,26 @@ class DevWorkflow:
             "analyze_requirements",
             self._route_after_analyze,
             {
-                "parallel_plan_and_tests": "parallel_plan_and_tests",
+                "identify_intent": "identify_intent",
                 END: END,
             },
         )
         workflow.add_conditional_edges(
-            "parallel_plan_and_tests",
-            self._route_after_parallel,
+            "identify_intent",
+            self._route_after_intent,
             {
-                "review_plan": "review_plan",
+                "plan_session": "plan_session",
+                "split_tasks": "split_tasks",
+                "implement_code": "implement_code",
+                "verify_tests": "verify_tests",
+                "ai_review": "ai_review",
+                "commit_code": "commit_code",
                 END: END,
             },
         )
         workflow.add_conditional_edges(
-            "review_plan",
-            self._route_after_review,
+            "plan_session",
+            self._route_after_plan_session,
             {
                 "split_tasks": "split_tasks",
                 END: END,
@@ -210,10 +255,35 @@ class DevWorkflow:
                 END: END,
             },
         )
-        workflow.add_edge("implement_code", "verify_tests")
-        workflow.add_edge("verify_tests", "ai_review")
-        workflow.add_edge("ai_review", "commit_code")
-        workflow.add_edge("commit_code", END)
+        workflow.add_conditional_edges(
+            "implement_code",
+            self._route_after_implement_code,
+            {
+                "verify_tests": "verify_tests",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "verify_tests",
+            self._route_after_verify_tests,
+            {
+                "ai_review": "ai_review",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "ai_review",
+            self._route_after_ai_review,
+            {
+                "commit_code": "commit_code",
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            "commit_code",
+            self._route_after_commit_code,
+            {END: END},
+        )
 
         return workflow.compile()
 
@@ -228,52 +298,30 @@ class DevWorkflow:
         *,
         name: str | None = None,
         source_file: Path | None = None,
-        skip_clarification: bool = False,
         auto: bool = False,
         fresh: bool = False,
     ) -> DevWorkflowState:
-        # --auto 隐含跳过澄清；门禁在内容就绪后自动通过（见 phase_gate）
-        if auto:
-            skip_clarification = True
-
         app_root = self._resolve_app_root()
         resolved_docs_dir, requirement_slug = resolve_requirement_docs_dir(
             app_root,
-            self.workflow_config.docs_dir,
             requirement,
             docs_dir=docs_dir,
             name=name,
             source_file=source_file,
+            project_docs_dir=self.workflow_config.project_docs_dir,
         )
-        docs_path = resolve_docs_path(app_root, resolved_docs_dir)
+        docs_path = resolve_docs_path(self._content_base(), resolved_docs_dir)
 
         if fresh and docs_path.exists():
-            for path in docs_path.glob("*.md"):
-                if path.name != "00-requirement.md":
-                    path.unlink()
+            for path in docs_path.rglob("*.md"):
+                if path.name == "00-requirement.md":
+                    continue
+                path.unlink()
+            clear_intent_cache(docs_path)
 
         original_path = save_original_requirement(docs_path, requirement)
-
-        if is_workflow_complete(docs_path):
-            logger.info("Workflow 已完成（07-commit.md status=completed）")
-            done_state: DevWorkflowState = {
-                "requirement": requirement,
-                "app_root": str(app_root),
-                "docs_dir": resolved_docs_dir,
-                "requirement_slug": requirement_slug,
-                "clarification_resolved": True,
-                "resume_from_node": "",
-                "auto": auto,
-                "skip_clarification": skip_clarification,
-            }
-            done_state.update(
-                restore_state_from_docs(docs_path, skip_clarification, auto=auto)
-            )
-            return done_state
-
-        start_node = determine_start_node(
-            docs_path, skip_clarification=skip_clarification, auto=auto
-        )
+        cached = None if fresh else load_cached_intent(docs_path)
+        start_node = determine_start_node(docs_path, auto=auto)
 
         initial: DevWorkflowState = {
             "requirement": requirement,
@@ -283,9 +331,7 @@ class DevWorkflow:
             "requirement_slug": requirement_slug,
             "resume_from_node": start_node,
             "node_outputs": {
-                "original_requirement": str(
-                    original_path.relative_to(app_root)
-                ),
+                "original_requirement": path_for_state(original_path, app_root),
             },
             "completed_nodes": [],
             "requirement_type": "",
@@ -296,24 +342,41 @@ class DevWorkflow:
             "delivery_role": "unknown",
             "delivery_blocks": [],
             "role_basis": "",
+            "involved_repos": None,
             "requirement_metadata": {},
             "clarification_questions": [],
             "clarification_resolved": False,
             "clarification_pending_count": 0,
             "clarification_round": 0,
             "user_clarifications": "",
-            "skip_clarification": skip_clarification,
             "auto": auto,
             "requirement_approved": False,
+            "intent_approved": False,
             "plan_approved": False,
             "test_cases_approved": False,
-            "review_plan_approved": False,
             "tasks_approved": False,
+            "git_branch": "",
+            "git_base": "",
             "test_passed": False,
             "last_error": None,
         }
+        cached_role = ""
+        if cached:
+            cached_role = str(cached["delivery_role"])
+            initial.update(
+                {
+                    "delivery_role": cached_role,
+                    "delivery_blocks": list(cached.get("delivery_blocks") or []),
+                    "role_basis": str(cached.get("role_basis") or ""),
+                    "involved_repos": list(cached.get("involved_repos") or []),
+                    "git_branch": str(cached.get("git_branch") or ""),
+                    "git_base": str(cached.get("git_base") or ""),
+                    "intent_approved": True,
+                    "completed_nodes": ["identify_intent"],
+                }
+            )
         initial.update(
-            restore_state_from_docs(docs_path, skip_clarification, auto=auto)
+            restore_state_from_docs(docs_path, role=cached_role, auto=auto)
         )
         return self._graph.invoke(initial)
 

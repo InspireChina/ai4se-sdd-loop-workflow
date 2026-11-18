@@ -10,7 +10,7 @@ PYTHON_BIN="${PYTHON_BIN:-}"
 MIN_PIP="21.3"
 FORCE=0
 SKIP_PATH=0
-MARKER="# ai4se-sdd-loop-workflow venv PATH"
+MARKER="# ai4se-sddl-collab-harness venv PATH"
 
 usage() {
   cat <<'EOF'

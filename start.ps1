@@ -1,4 +1,4 @@
-﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
+﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sddl-collab-harness（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 #
 # 注意: 禁止 python -c 传入含百分号格式化的代码；PS 5.1 解析阶段可能误判并级联报错。
@@ -35,7 +35,6 @@ function Show-Usage {
         '  -t, -tool TOOL          可选: cursor | claude_code | codex | omp | echo'
         '  -model MODEL            可选，覆盖全部节点模型'
         '  -d, -docs-dir DIR       覆盖完整产出目录'
-        '  -skip-clarification     跳过需求澄清 loop'
         '  -auto                   无人值守'
         '  -fresh                  清除已有产出后重来'
         '  -h, -help               显示帮助'
@@ -43,7 +42,7 @@ function Show-Usage {
         '依赖安装请用 .\init_env.cmd，本脚本不会执行 pip install。'
         ''
         '示例:'
-        '  .\start.cmd -tool echo -skip-clarification -file ..\docs\requirements\jwt-login-requirement.md -name jwt-login'
+        '  .\start.cmd -tool echo -file ..\docs\requirements\jwt-login-requirement.md -name jwt-login'
         '  .\start.cmd -name jwt-login -file ..\docs\requirements\jwt-login-requirement.md'
         '  .\start.cmd -name jwt-login'
     ) -join [Environment]::NewLine
@@ -126,7 +125,6 @@ function Test-VenvHealthy([string]$Dir) {
 # ---------- parse args ----------
 # 同时接受 GNU 风格长选项与单减号别名；比较用单引号字面量
 # 本脚本永不 pip install；未安装时提示执行 init_env
-$SkipClarification = $false
 $AutoMode = $false
 $Fresh = $false
 $Tool = ''
@@ -137,9 +135,6 @@ $ReqFile = ''
 $ReqText = New-Object System.Collections.Generic.List[string]
 
 $optHelp = @('-h', '-help', '--help')
-# 兼容旧参数：忽略，安装一律走 init_env
-$optIgnoredInstall = @('-skip-install', '--skip-install', '-force-install', '--force-install')
-$optSkipClarification = @('-skip-clarification', '--skip-clarification')
 $optAuto = @('-auto', '--auto')
 $optFresh = @('-fresh', '--fresh')
 $optTool = @('-t', '-tool', '--tool')
@@ -156,11 +151,6 @@ while ($i -lt $tokens.Count) {
     if ($optHelp -contains $a) {
         Show-Usage
         exit 0
-    } elseif ($optIgnoredInstall -contains $a) {
-        $i++
-    } elseif ($optSkipClarification -contains $a) {
-        $SkipClarification = $true
-        $i++
     } elseif ($optAuto -contains $a) {
         $AutoMode = $true
         $i++
@@ -254,7 +244,7 @@ function Test-PackageInstalled([string]$Py) {
         # pip may warn about stale "~*" directories on stderr. Under Windows
         # PowerShell 5.1 that warning must not become a terminating error.
         $ErrorActionPreference = "SilentlyContinue"
-        & $Py -m pip show ai4se-sdd-loop-workflow 2>$null | Out-Null
+        & $Py -m pip show ai4se-sddl-collab-harness 2>$null | Out-Null
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousPreference
@@ -275,13 +265,14 @@ if (-not (Test-PackageInstalled $VenvPython)) {
 Write-Host '==> 依赖已安装（安装请用 init_env.cmd，此处不执行 pip install）'
 
 # ---------- default requirement ----------
-if (-not $ReqFile -and $ReqText.Count -eq 0) {
+# 续跑只传 -name：交给 run.py 读取 spec/<name>/00-requirement.md
+if (-not $ReqFile -and $ReqText.Count -eq 0 -and -not $ReqName) {
     $defaultReq = '..\docs\requirements\jwt-login-requirement.md'
     if (Test-Path -LiteralPath $defaultReq) {
         Write-Host "==> 未传需求，使用默认: $defaultReq"
         $ReqFile = $defaultReq
     } else {
-        Die '请提供需求文本或 -file；也可用 -help 查看示例'
+        Die '请提供需求文本或 -file；续跑可只传 -name。也可用 -help 查看示例'
     }
 }
 
@@ -298,7 +289,6 @@ if ($Tool) { [void]$RunArgs.Add('--tool'); [void]$RunArgs.Add($Tool) }
 if ($Model) { [void]$RunArgs.Add('--model'); [void]$RunArgs.Add($Model) }
 if ($ReqName) { [void]$RunArgs.Add('--name'); [void]$RunArgs.Add($ReqName) }
 if ($DocsDir) { [void]$RunArgs.Add('--docs-dir'); [void]$RunArgs.Add($DocsDir) }
-if ($SkipClarification) { [void]$RunArgs.Add('--skip-clarification') }
 if ($AutoMode) { [void]$RunArgs.Add('--auto') }
 if ($Fresh) { [void]$RunArgs.Add('--fresh') }
 

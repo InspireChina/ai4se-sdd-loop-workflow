@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai4se-sdd-loop-workflow"
+name = "ai4se-sddl-collab-harness"
 version = "0.1.0"
-description = "LangGraph workflow: requirement → plan → tasks → code → tests"
+description = "SDD-based team collaboration harness: requirement → plan → tasks → code → tests → review → commit"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
 dependencies = [
@@ -22,6 +22,7 @@ dependencies = [
 sddl = "src.cli:main"
 sddl-init = "src.cli:main"
 sddl-start = "src.cli:main"
+# 兼容旧命令名
 sdd-loop-workflow = "src.cli:main"
 sdd-loop-workflow-init = "src.cli:main"
 sdd-loop-workflow-start = "src.cli:main"

@@ -21,7 +21,7 @@ description: >-
 
 ## 1. 确定 PRD 文件（得到 `--file`）
 
-先看上下文有没有本地 PRD 路径；没有再看是否要从外部系统读。
+先看上下文有没有本地 PRD 路径；再看卡号对应目录是否已经存在；都没有才从外部系统读。
 
 ### 已给出本地路径
 
@@ -31,11 +31,19 @@ description: >-
 
 路径不存在或是目录 → 说明情况，停止，不要拼命令。
 
+### 卡号对应目录已存在
+
+用户给的是卡号（需求编号，如 Colla、Jira）时，先看 `<project_docs_dir>/spec/<卡号>/`。`project_docs_dir` 以业务根 `sdd-loop-workflow-config/workflow-local.yaml` 为准。
+
+目录已经存在：不要调用 MCP，不要再写 `origin_requirements` 文件。用该卡号作为 `--name` 直接拼启动命令。目录里已有 `00-requirement.md` 时不要加 `--file`。
+
+目录不存在：再走下面的外部读取。
+
 ### 要从 Colla、Jira 或其它外部系统读取
 
 1. MCP 与读法只以本次 skill 输入和项目已有 rule 为准（Cursor rules、`CLAUDE.md`、`AGENTS.md`、omp rules、`ai-rules` 等）。
 2. 不要猜 MCP 名，不要自编读法；没说明就问用户，不要拼命令。
-3. 读到正文后写入业务根 `<docs_dir>/requirements/<标识>.md`（`docs_dir` 默认 `spec`，以 `sdd-loop-workflow-config/workflow.yaml` 为准）。目录不存在就创建；同名覆盖。
+3. 读到正文后写入 `<project_docs_dir>/origin_requirements/<标识>.md`。`project_docs_dir` 以业务根 `sdd-loop-workflow-config/workflow-local.yaml` 为准。为空或目录不存在时不要写文件，说明配置错误后停止。`origin_requirements` 目录不存在就创建；同名覆盖。
 4. 标识优先需求编号，否则用标题（只留字母、数字、中文、`-`）。
 5. 正文为空 → 停止。写入后的绝对路径即为 `--file`。
 
@@ -45,7 +53,7 @@ description: >-
 
 ## 2. 读取业务 tool 配置
 
-打开业务根 `sdd-loop-workflow-config/workflow.yaml`，检查是否配置了 AI 工具：
+打开业务根 `sdd-loop-workflow-config/workflow-local.yaml`，检查是否配置了 AI 工具：
 
 - 存在 `defaults.tool`，或任一 `nodes.<id>.tool` → **已配置**
 - 否则 → **未配置**
@@ -73,14 +81,12 @@ sddl start --tool claude_code --file "<PRD 绝对路径>"
 | 参数 | 何时加入 |
 |------|----------|
 | `--tool claude_code` | **仅当**走「强制本环境」命令时加入。值默认 `claude_code`；用户明确要求别的工具（如 `echo`）时才改。已配业务 `defaults.tool` 且用户未要求强制时，**推荐命令不要加** `--tool`。 |
-| `--file <绝对路径>` | **始终**加入（上一步得到的路径）。续跑且用户明确说「只续跑、不再读 PRD」且已有 `00-requirement.md` 时，可省略 `--file`，但须同时有可用的 `--name`。 |
+| `--file <绝对路径>` | 上一步得到了本地 PRD 路径时加入。卡号对应的 `spec/<卡号>/` 已存在且里面已有 `00-requirement.md` 时**不要**加，也不要为此去拉 MCP。 |
 | `--name <目录名>` | 用户指定了产出目录名/需求名/slug；或从 PRD 文件名、标题、需求编号能稳定推导出短标识时**主动加上**（便于续跑）。不要用超长标题。 |
 | `--docs-dir <路径>` | 用户要覆盖默认产出目录，或明确说产出不在默认 `docs_dir`（如 `spec`）下时加上。未提及则不加。 |
 | `--model <名>` | 用户明确指定模型时加上（会覆盖配置中全部节点的 model）。未提及不加。 |
 | `--auto` | 出现无人值守意图：**无人值守、全自动、不打断、不提问、自动跑完、别问我、auto、unattended** 等。普通「启动一下」**不要**加。 |
-| `--skip-clarification` | 用户只要跳过澄清、或 CI/echo 调试且未要求完整澄清时加上。若已加 `--auto`，**不必再写**。 |
 | `--fresh` | 用户明确要重来、清空重跑、从头开始时加上。续跑时**禁止**加。 |
-| `--skip-install` | 用户明确跳过依赖安装、加速启动、venv 已就绪时加上。未提及不加。 |
 | `-h` / `--help` | 用户只想看帮助时，只输出帮助命令，不要拼启动。 |
 
 规则补充：
@@ -106,12 +112,12 @@ sddl start --tool claude_code --file "/absolute/path/to/prd.md" --name login
 
 说明：
 
-- **A**：完全按业务 `workflow.yaml` 合并后的配置跑；可不改启动命令切换节点工具。
+- **A**：完全按业务 `workflow-local.yaml` 合并后的配置跑；可不改启动命令切换节点工具。
 - **B**：CLI `--tool` 会**覆盖全部节点**，忽略配置里的按节点 tool。
 
 ### 业务未配置 tool
 
-只给带 `--tool` 的命令（当前 agent = `claude_code`），并提示可在 `sdd-loop-workflow-config/workflow.yaml` 增加 `defaults.tool` 后改用不带 `--tool` 的启动方式。
+只给带 `--tool` 的命令（当前 agent = `claude_code`），并提示可在 `sdd-loop-workflow-config/workflow-local.yaml` 增加 `defaults.tool` 后改用不带 `--tool` 的启动方式。
 
 ```bash
 sddl start --tool claude_code --file "/absolute/path/to/prd.md" --name login

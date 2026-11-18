@@ -1,0 +1,73 @@
+# 团队共享目录下的某一个项目目录（相对业务根或绝对路径）。
+# 团队共享目录里可以有多个项目；这里填的是项目那一层，不是共享目录本身。
+# sddl init 只询问并写入这个地址，不创建目录。
+# 目录不存在时，sddl start 会失败。
+#
+# <团队共享目录>/
+#   <项目名>/                            # project_docs_dir
+#     origin_requirements/               原始需求
+#     spec/<需求名>/
+#       requirements/                  需求
+#       plan/                          计划、用例
+#       task/                          任务
+#       code/                          实现、测试、评审、提交
+#     common_extend_rules/               公共扩展规则，与 repos 平级；按需读取
+#     repos/<仓库名>/extend_rules/       该仓库的扩展规则；做该仓库时再读
+project_docs_dir: ""
+
+# 推荐强度阈值（0-1）：澄清项 suggestion_confidence >= 该值时自动采纳推荐方案，不打断用户。
+# 每个节点在下方 nodes.<id>.recommendation_threshold 单独配置；未配置时回退默认 0.8。
+# 调低则更多项自动采纳、更少打断，调高则更多项需用户确认。
+
+# 各节点默认用下面的 tool、model。
+# 某个节点要单独换时，在该节点下写 tool、model，优先于这里的 defaults。
+# model 留空表示用该 tool 自己的默认模型。
+# tool 可写：claude_code、cursor、codex、oh_my_pi（omp 同样）、echo。
+#
+# 例：只把计划节点换成 cursor，其它节点仍用 defaults
+# plan_session:
+#   tool: cursor
+#   model: ""
+#   recommendation_threshold: 0.8
+#
+# 各节点要读的扩展规则写在 extend_rules，路径相对 project_docs_dir：
+#   common_extend_rules/<文件名>.md
+#   repos/<仓库名>/extend_rules/<文件名>.md
+# 公共规则只要该节点配了就读。仓库规则还要属于计划里的 involved_repos。
+# 例：
+#   plan_session:
+#     extend_rules:
+#       - common_extend_rules/<文件名>.md
+#       - repos/<仓库名>/extend_rules/<文件名>.md
+defaults:
+  tool: claude_code
+  model: ""
+
+nodes:
+  analyze_requirements:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  identify_intent:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  plan_session:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  design_test_cases:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  split_tasks:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  implement_code:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  verify_tests:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  ai_review:
+    recommendation_threshold: 0.8
+    extend_rules: []
+  commit_code:
+    recommendation_threshold: 0.8
+    extend_rules: []

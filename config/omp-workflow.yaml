@@ -1,4 +1,0 @@
-# Oh My Pi workflow overlay — 由本仓库启动 omp 时自动注入（--config）。
-# 关闭内置 browser，避免与项目自行配置的 MCP 冲突；引擎不再管理 Playwright MCP。
-browser:
-  enabled: false
