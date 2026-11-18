@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-canvas-width="888" data-canvas-height="1176" style="width:888px;height:1176px;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=888">
+  <style>
+    @font-face {
+      font-family: "Source Han Sans SC VF";
+      src: url("https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/doubao/infinite-canvas/fonts/v1/source-han-sans-sc-vf/source-han-sans-sc-vf.otf") format("opentype");
+      font-weight: 250 900;
+      font-style: normal;
+      font-display: block;
+    }
+    @font-face {
+      font-family: "Fragment Mono";
+      src: url("https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/doubao/infinite-canvas/fonts/v1/fragment-mono/fragment-mono-regular.ttf") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: block;
+    }
+    @font-face {
+      font-family: "Source Han Serif CN";
+      src: url("https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/doubao/infinite-canvas/fonts/v1/source-han-serif-cn/source-han-serif-cn-semi-bold.otf") format("opentype");
+      font-weight: 600;
+      font-style: normal;
+      font-display: block;
+    }
+
+    :root{
+      --ink:#0F172A;
+      --body:#475467;
+      --muted:#8A94A6;
+      --line:#E3E7ED;
+      --blue:#2563EB; --teal:#0E7490; --teal-bg:#ECF6F9; --teal-line:#B9DFE9;
+      --amber:#B45309; --amber-bg:#FFF6EA; --amber-line:#F2D8AF;
+      --green:#0B7355; --green-bg:#EAF8F1; --green-line:#B4E3CC;
+      --sans:"Source Han Sans SC VF","PingFang SC","Microsoft YaHei",sans-serif;
+      --serif:"Source Han Serif CN","Songti SC",serif;
+      --mono:"Fragment Mono","Source Han Sans SC VF",monospace;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;}
+    html{overflow:auto;}
+    body{width:888px; min-height:1176px;}
+    .canvas{
+      position:relative; width:1480px; height:1960px;
+      /* 视觉缩小；负 margin 收拢布局占位 */
+      transform:scale(0.6); transform-origin:top left;
+      margin-right:-592px; margin-bottom:-784px;
+      font-family:var(--sans); color:var(--ink);
+      background:
+              radial-gradient(1200px 700px at 12% -8%, #FFFFFF 0%, rgba(255,255,255,0) 60%),
+              radial-gradient(900px 620px at 108% 4%, #EEF3FB 0%, rgba(238,243,251,0) 62%),
+              linear-gradient(168deg,#FCFBF7 0%,#F7F8FB 52%,#F2F5F9 100%);
+    }
+    .canvas::before{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background-image:
+              linear-gradient(to right, rgba(15,23,42,.045) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(15,23,42,.045) 1px, transparent 1px);
+      background-size:40px 40px;
+      -webkit-mask-image:radial-gradient(120% 80% at 50% 0%, rgba(0,0,0,.55), rgba(0,0,0,0) 72%);
+      mask-image:radial-gradient(120% 80% at 50% 0%, rgba(0,0,0,.55), rgba(0,0,0,0) 72%);
+    }
+    /* 最外层 harness 框（框外标注） */
+    .harness-frame{
+      position:absolute; left:40px; top:48px; width:1400px; height:1880px;
+      border:2.5px solid #334155; border-radius:18px;
+      pointer-events:none; z-index:5;
+      box-shadow:0 0 0 1px rgba(51,65,85,.08);
+    }
+    .harness-label{
+      position:absolute; left:64px; top:20px;
+      padding:0 14px; z-index:6;
+      font-family:var(--mono); font-size:16px; font-weight:600;
+      letter-spacing:.5px; color:#334155;
+      background:linear-gradient(168deg,#FCFBF7 0%,#F7F8FB 100%);
+      line-height:28px;
+    }
+    .harness-inner{
+      position:absolute; left:40px; top:48px; width:1400px; height:1880px;
+    }
+
+    .eyebrow{
+      position:absolute; left:84px; top:44px; display:flex; align-items:center; gap:12px;
+      font-size:14px; letter-spacing:3.2px; color:var(--muted); font-weight:500;
+    }
+    .eyebrow .dash{width:34px; height:2px; background:var(--muted); opacity:.55;}
+    .title{
+      position:absolute; left:84px; top:62px; width:1000px;
+      font-family:var(--serif); font-weight:600; font-size:44px; line-height:56px;
+      letter-spacing:.5px; color:var(--ink);
+    }
+
+    .legend{position:absolute; left:84px; top:140px; display:flex; gap:10px;}
+    .lg{
+      display:flex; align-items:center; gap:7px; height:28px; padding:0 12px 0 10px;
+      border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.78);
+      font-size:14px; color:var(--body); letter-spacing:.3px;
+    }
+    .lg i{width:8px; height:8px; border-radius:50%; display:block;}
+
+    .repo-tab{
+      position:absolute; left:820px; top:140px; width:228px; height:26px;
+      border:1px solid #D6DEE8; border-bottom:none; border-radius:6px 6px 0 0;
+      background:rgba(244,247,251,.94);
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      font-size:13px; letter-spacing:2.6px; color:#6B7789;
+    }
+    .repo-tab i{width:6px; height:6px; border-radius:1px; background:#98A2B3; transform:rotate(45deg);}
+    .repo-band{
+      position:absolute; left:820px; top:166px; width:228px; height:1540px;
+      background:rgba(245,248,252,.88);
+      border:1px solid #DCE4EE; border-radius:0 0 14px 14px;
+    }
+
+    .wires{position:absolute; left:0; top:0; width:1400px; height:1780px; pointer-events:none;}
+
+    .card{
+      position:absolute; border-radius:12px; padding:18px 20px 16px 22px;
+      background:#FFFFFF; border:1px solid var(--line);
+      box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 20px -14px rgba(16,24,40,.22);
+    }
+    .card .bar{position:absolute; left:0; top:0; width:5px; height:100%; border-radius:12px 0 0 12px;}
+    .tagrow{display:flex; align-items:center; justify-content:space-between; height:26px;}
+    .tag{font-size:15px; letter-spacing:.9px; font-weight:600;}
+    .num{
+      width:26px; height:26px; border-radius:50%; border:1px solid var(--line);
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:700; color:var(--muted); background:#FBFCFE;
+    }
+    .ctitle{font-size:22px; line-height:28px; font-weight:600; letter-spacing:.2px; margin-top:6px;}
+    .cbody{font-size:14px; line-height:22px; color:var(--body); margin-top:4px;}
+    .cbody .cmd{
+      font-family:var(--mono); font-size:12px; font-weight:400; color:#334155;
+      background:#F4F6FA; border:1px solid #E6EAF1; border-radius:5px;
+      padding:1px 5px; letter-spacing:-.3px; white-space:nowrap;
+    }
+    .prompts{
+      margin-top:6px; padding-top:6px; border-top:1px dashed #E2E8F0;
+      font-family:var(--mono); font-size:11px; line-height:16px; color:#64748B; letter-spacing:-.2px;
+    }
+    .prompts .ph{font-size:10px; letter-spacing:1px; color:#94A3B8; margin-bottom:2px;}
+    .prompts span{display:block;}
+    .reflabel{
+      position:absolute; left:520px; width:250px; text-align:center;
+      font-size:12px; line-height:16px; font-weight:600; color:#0B7355; letter-spacing:0;
+      white-space:nowrap; pointer-events:none; z-index:2;
+    }
+    .pushlabel{
+      position:absolute; left:520px; width:250px; text-align:center;
+      font-size:15px; color:#7A8799; letter-spacing:.6px; pointer-events:none; z-index:2;
+    }
+
+    .par{display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;}
+    .pn{
+      display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:6px;
+      background:#F3F7FF; border:1px solid #D6E3FB; font-size:12px; color:#334155; letter-spacing:.2px;
+      white-space:nowrap;
+    }
+    .pn em{font-style:normal; font-weight:600; color:#2563EB; margin-right:4px;}
+    .psym{font-size:15px; color:#93A2B8;}
+
+    .rv{
+      display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:6px;
+      font-size:12px; letter-spacing:.2px; white-space:nowrap;
+    }
+    .rv.dev{background:#F3F7FF; border:1px solid #D6E3FB; color:#334155;}
+    .rv.qa{background:var(--amber-bg); border:1px solid var(--amber-line); color:#7C4A12;}
+    .rv em{font-style:normal; font-weight:600; margin-right:4px;}
+    .rv.dev em{color:#2563EB;}
+    .rv.qa em{color:var(--amber);}
+
+    .dev{border-color:#DCE6F7;}
+    .dev .tag{color:var(--blue);}
+
+    .slot{
+      position:absolute; background:#FFFFFF; border:1px dashed #C9D3E1;
+      border-radius:10px; padding:13px 14px 12px;
+    }
+    .slot .sh{font-family:var(--mono); font-size:13px; font-weight:400; letter-spacing:1.2px; color:#7A879A;}
+    .slot .files{margin-top:6px; display:flex; flex-direction:column; gap:3px;}
+    .slot .files .sf{margin-top:0; font-family:var(--mono); font-size:13px; font-weight:400; letter-spacing:-.3px; line-height:20px; color:#1F2937;}
+    .pills{margin-top:9px; display:flex; flex-direction:column; gap:6px;}
+    .pill{
+      display:inline-flex; align-items:center; height:25px; padding:0 9px; border-radius:13px;
+      font-size:13px; width:max-content; max-width:100%; white-space:nowrap;
+    }
+    .pill.v1{background:#F4F6FA; border:1px solid #E2E7EF; color:#5B6779;}
+    .pill.ok{background:var(--green-bg); border:1px solid var(--green-line); color:var(--green); font-weight:600;}
+
+    .gate{background:#FFFFFF; border-width:1.5px; padding-top:17px;}
+    .gate.ba{border-color:var(--teal-line); box-shadow:0 0 0 3px rgba(14,116,144,.05), 0 8px 20px -14px rgba(16,24,40,.22);}
+    .gate.qa{border-color:var(--amber-line); box-shadow:0 0 0 3px rgba(180,83,9,.05), 0 8px 20px -14px rgba(16,24,40,.22);}
+    .gtag{
+      display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:5px;
+      font-size:12px; font-weight:700; letter-spacing:1.8px;
+    }
+    .gate.ba .gtag{background:var(--teal-bg); color:var(--teal); border:1px solid var(--teal-line);}
+    .gate.qa .gtag{background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-line);}
+    .gate .ctitle{font-size:22px; line-height:29px; margin-top:7px;}
+    .gate .cbody{font-size:16px; line-height:24px; margin-top:5px;}
+    .okchip{
+      display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border-radius:12px;
+      background:var(--green-bg); border:1px solid var(--green-line);
+      color:var(--green); font-size:13px; font-weight:600;
+    }
+    .okchip svg{display:block;}
+
+    .note{
+      position:absolute; padding-left:14px; border-left:2px dashed #CBD5E1;
+      font-size:16px; line-height:26px; color:#667085;
+    }
+    .note::before{
+      content:""; position:absolute; left:-5px; top:7px; width:7px; height:7px; border-radius:50%;
+      background:#CBD5E1;
+    }
+    .note b{color:#334155; font-weight:600;}
+
+    .foot{
+      position:absolute; left:84px; top:1755px; width:1260px;
+      border-top:1px solid var(--line); padding-top:16px;
+    }
+    .foot .flow{display:flex; align-items:center; gap:8px; font-size:15px; color:#667085; flex-wrap:wrap;}
+    .foot .flow .lb{font-weight:600; color:#475467; letter-spacing:.4px; margin-right:4px;}
+    .foot .flow .chip{
+      height:26px; padding:0 10px; border-radius:6px; background:#FFFFFF; border:1px solid #E1E7F0;
+      display:flex; align-items:center; font-size:14px; color:#3F4C5F;
+    }
+    .foot .flow .arw{color:#B0BAC8; font-size:13px;}
+    .foot .src{margin-top:9px; font-size:14px; color:#8A94A6; line-height:24px;}
+    .foot .src .mono{font-family:var(--mono); font-size:13px; font-weight:400; color:#5B6779;}
+  </style>
+</head>
+<body style="width:888px;min-height:1176px;">
+<main class="canvas" data-canvas-root style="width:1480px;height:1960px;">
+
+  <div class="harness-label">基于 SDD 的团队协作 harness</div>
+  <div class="harness-frame"></div>
+
+  <div class="harness-inner">
+  <div class="eyebrow"><span class="dash"></span>AI4SE · SDD LOOP</div>
+  <div class="title">从需求到提交：团队协作闭环</div>
+  <div class="legend">
+    <div class="lg"><i style="background:#2563EB"></i>开发（需求 / 前后端）</div>
+    <div class="lg"><i style="background:#0E7490"></i>BA</div>
+    <div class="lg"><i style="background:#B45309"></i>QA</div>
+    <div class="lg"><i style="background:#98A2B3"></i>公共仓库</div>
+  </div>
+
+  <div class="repo-tab"><i></i>公共仓库 · TEAM DOCS</div>
+  <div class="repo-band"></div>
+
+  <svg class="wires" viewBox="0 0 1400 1780" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 z" fill="#8E9AAB"/>
+      </marker>
+      <marker id="ahg" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 z" fill="#0B7355"/>
+      </marker>
+      <marker id="ahl" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 z" fill="#B6C0CE"/>
+      </marker>
+      <marker id="ahref" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 z" fill="#0B7355"/>
+      </marker>
+    </defs>
+
+    <!-- push：节点 → 公共仓库（意图识别除外） -->
+    <g stroke="#8E9AAB" stroke-width="2.4" fill="none">
+      <path d="M464 340 L830 340" marker-end="url(#ah)"/>
+      <path d="M1038 340 L1080 340" marker-end="url(#ah)"/>
+      <path d="M464 852 L830 852" marker-end="url(#ah)"/>
+      <path d="M1038 852 L1080 852" marker-end="url(#ah)"/>
+      <path d="M464 1108 L830 1108" marker-end="url(#ah)"/>
+      <path d="M464 1364 L830 1364" marker-end="url(#ah)"/>
+      <path d="M464 1620 L830 1620" marker-end="url(#ah)"/>
+      <path d="M274 956 L274 1004" marker-end="url(#ah)"/>
+      <path d="M274 1212 L274 1260" marker-end="url(#ah)"/>
+      <path d="M274 1468 L274 1516" marker-end="url(#ah)"/>
+    </g>
+
+    <!-- 引用虚线：节点 → 公共仓库（意图识别除外） -->
+    <g stroke="#0B7355" stroke-width="2.2" fill="none" stroke-dasharray="6 4" opacity=".95">
+      <path d="M464 314 L830 314" marker-end="url(#ahref)"/>
+      <path d="M464 826 L830 826" marker-end="url(#ahref)"/>
+      <path d="M464 1082 L830 1082" marker-end="url(#ahref)"/>
+      <path d="M464 1338 L830 1338" marker-end="url(#ahref)"/>
+      <path d="M464 1594 L830 1594" marker-end="url(#ahref)"/>
+    </g>
+
+    <g stroke="#0B7355" stroke-width="2" fill="none" stroke-dasharray="7 5" opacity=".85">
+      <!-- BA 确认放行 → 意图识别 -->
+      <path d="M1170 440 L1170 470 L456 470 L456 492" marker-end="url(#ahg)"/>
+      <!-- QA→测试：接到测试卡片上沿，避开走廊虚线 -->
+      <path d="M1198 952 L1198 1291 L472 1291" marker-end="url(#ahg)"/>
+    </g>
+    <!-- 意图 → plan：透传 -->
+    <path d="M274 700 L274 748" stroke="#8E9AAB" stroke-width="2.4" fill="none" marker-end="url(#ah)"/>
+
+    <path d="M84 1620 L48 1620 L48 340 L80 340" stroke="#B6C0CE" stroke-width="2"
+          fill="none" stroke-dasharray="8 6" marker-end="url(#ahl)"/>
+  </svg>
+
+  <!-- 走廊标注：每行引用 + push -->
+  <div class="reflabel" style="left:520px;top:292px;">引用 项目自定义rule · mcp · skills</div>
+  <div class="pushlabel" style="left:520px;top:348px;">push</div>
+  <div style="position:absolute;left:1040px;top:312px;width:36px;text-align:center;font-size:16px;color:#7A8799;letter-spacing:.6px;">评审</div>
+  <div style="position:absolute;left:1180px;top:458px;font-size:15px;color:#0B7355;letter-spacing:.4px;">确认放行</div>
+
+  <div style="position:absolute;left:520px;top:580px;width:250px;text-align:center;font-size:13px;color:#7A8799;">本地落盘 · 不 push</div>
+
+  <div class="reflabel" style="left:520px;top:804px;">引用 项目自定义rule · mcp · skills</div>
+  <div class="pushlabel" style="left:520px;top:860px;">push</div>
+  <div style="position:absolute;left:1040px;top:824px;width:36px;text-align:center;font-size:16px;color:#7A8799;letter-spacing:.6px;">评审</div>
+  <div style="position:absolute;left:1206px;top:958px;font-size:14px;color:#B45309;letter-spacing:.3px;white-space:nowrap;">不阻塞编码</div>
+  <div style="position:absolute;left:1206px;top:1120px;font-size:15px;color:#0B7355;letter-spacing:.4px;">需引用</div>
+
+  <div class="reflabel" style="left:520px;top:1060px;">引用 项目自定义rule · mcp · skills</div>
+  <div class="pushlabel" style="left:520px;top:1116px;">push</div>
+  <div class="reflabel" style="left:520px;top:1316px;">引用 项目自定义rule · mcp · skills</div>
+  <div class="pushlabel" style="left:520px;top:1372px;">push</div>
+  <div class="reflabel" style="left:520px;top:1572px;">引用 项目自定义rule · mcp · skills</div>
+  <div class="pushlabel" style="left:520px;top:1628px;">push</div>
+
+  <div style="position:absolute;left:250px;top:708px;font-size:13px;color:#7A8799;white-space:nowrap;">透传 role / repos / branch</div>
+  <div style="position:absolute;left:286px;top:964px;font-size:15px;color:#7A8799;">plan 自评后继续</div>
+  <div style="position:absolute;left:286px;top:1220px;font-size:15px;color:#7A8799;">实现完成</div>
+  <div style="position:absolute;left:286px;top:1476px;font-size:15px;color:#7A8799;">测试通过</div>
+
+  <div style="position:absolute;left:14px;top:900px;width:22px;writing-mode:vertical-rl;font-size:13px;letter-spacing:4px;color:#98A2B3;">SDD LOOP · 下一轮需求</div>
+
+  <!-- 1 需求 -->
+  <div class="card dev" style="left:84px;top:240px;width:380px;height:200px;padding:14px 16px 10px 18px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">开发 · 提需求</span><span class="num">1</span></div>
+    <div class="ctitle">启动工作流，产出需求文档</div>
+    <div class="cbody"><span class="cmd">sddl start</span> 拉起需求节点</div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>01_requirements.md</span><span>01_requirements.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:240px;width:208px;height:200px;">
+    <div class="sh">REQUIREMENTS</div>
+    <div class="files">
+      <div class="sf">01-requirements.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">v1 · 开发 push</div>
+      <div class="pill ok">✓ BA 确认定稿</div>
+    </div>
+  </div>
+
+  <div class="card gate ba" style="left:1080px;top:240px;width:236px;height:200px;">
+    <div class="tagrow"><span class="gtag">BA</span><span class="okchip"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6.4 L4.8 9 L10 3.2" stroke="#0B7355" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>approved</span></div>
+    <div class="ctitle">Review 需求</div>
+    <div class="cbody">读 PRD → 澄清 → 确认 → push 定稿</div>
+  </div>
+
+  <!-- 2 意图识别 -->
+  <div class="card dev" style="left:84px;top:496px;width:380px;height:200px;padding:14px 16px 10px 18px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">工作流 · 意图识别</span><span class="num">2</span></div>
+    <div class="ctitle">识别角色 / 仓库 / 分支</div>
+    <div class="cbody">基于终端目录代码仓判定，结果透传后续节点</div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>02_identify_intent.md</span><span>02_identify_intent.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:496px;width:208px;height:200px;">
+    <div class="sh">INTENT · LOCAL</div>
+    <div class="files">
+      <div class="sf">02-intent-local.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">role · repos · branch</div>
+      <div class="pill ok">✓ 透传全链路</div>
+    </div>
+  </div>
+
+  <div class="note" style="left:1080px;top:520px;width:236px;">落盘 <b>intent/</b>（本地缓存，不提交公共仓库）；后续 plan → 提交均读取。</div>
+
+  <!-- 3 plan + 用例 -->
+  <div class="card dev" style="left:84px;top:752px;width:380px;height:200px;padding:12px 14px 8px 16px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">工作流 · plan 阶段</span><span class="num">3</span></div>
+    <div class="ctitle" style="margin-top:2px;font-size:18px;line-height:24px;">plan ∥ 测试用例并行</div>
+    <div class="par" style="margin-top:4px;">
+      <span class="pn"><em>主</em>·plan</span>
+      <span class="psym">∥</span>
+      <span class="pn"><em>sub</em>·用例</span>
+      <span class="psym">·</span>
+      <span class="rv dev"><em>plan</em>自评</span>
+      <span class="rv qa"><em>用例</em>QA</span>
+    </div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>02_plan_session.md</span><span>02_plan_session.auto.md</span><span>02_design_test_cases.md</span><span>02_design_test_cases.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:752px;width:208px;height:200px;">
+    <div class="sh">PLAN</div>
+    <div class="files">
+      <div class="sf">02-plan-*.md</div>
+      <div class="sf">02-test-cases.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">v1 · 开发 push</div>
+      <div class="pill ok">✓ QA 确认用例</div>
+    </div>
+  </div>
+
+  <div class="card gate qa" style="left:1080px;top:752px;width:236px;height:200px;">
+    <div class="tagrow"><span class="gtag">QA</span><span class="okchip"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6.4 L4.8 9 L10 3.2" stroke="#0B7355" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>approved</span></div>
+    <div class="ctitle">评审测试用例</div>
+    <div class="cbody">核对覆盖度与边界 → 确认定稿<br>不阻塞 task / code</div>
+  </div>
+
+  <!-- 4 任务与编码 -->
+  <div class="card dev" style="left:84px;top:1008px;width:380px;height:200px;padding:14px 16px 10px 18px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">工作流 · task / code</span><span class="num">4</span></div>
+    <div class="ctitle">任务拆解与编码</div>
+    <div class="cbody">plan 自评后即可推进，不等待 QA</div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>03_split_tasks.md</span><span>03_split_tasks.auto.md</span><span>04_implement_code.md</span><span>04_implement_code.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:1008px;width:208px;height:200px;">
+    <div class="sh">TASK / CODE</div>
+    <div class="files">
+      <div class="sf">03-tasks-*.md</div>
+      <div class="sf">04-implementation-*.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">v1 · 开发 push</div>
+    </div>
+  </div>
+
+  <!-- 5 测试 -->
+  <div class="card dev" style="left:84px;top:1264px;width:380px;height:200px;padding:14px 16px 10px 18px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">工作流 · 测试</span><span class="num">5</span></div>
+    <div class="ctitle">单测与集成测试</div>
+    <div class="cbody">按用例报告执行；未 approved 仅提醒</div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>05_verify_tests.md</span><span>05_verify_tests.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:1264px;width:208px;height:200px;">
+    <div class="sh">TEST</div>
+    <div class="files">
+      <div class="sf">05-test-report-*.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">v1 · 开发 push</div>
+    </div>
+  </div>
+
+  <!-- 6 提交 -->
+  <div class="card dev" style="left:84px;top:1520px;width:380px;height:200px;padding:14px 16px 10px 18px;">
+    <div class="bar" style="background:#2563EB"></div>
+    <div class="tagrow"><span class="tag">工作流 · 收尾</span><span class="num">6</span></div>
+    <div class="ctitle">AI Review 后提交</div>
+    <div class="cbody">AI review → commit / PR · Action List</div>
+    <div class="prompts"><div class="ph">harness内置prompts</div><span>06_ai_review.md</span><span>06_ai_review.auto.md</span><span>07_commit.md</span><span>07_commit.auto.md</span></div>
+  </div>
+
+  <div class="slot" style="left:830px;top:1520px;width:208px;height:200px;">
+    <div class="sh">REVIEW / COMMIT</div>
+    <div class="files">
+      <div class="sf">06-ai-review-*.md</div>
+      <div class="sf">07-commit-*.md</div>
+    </div>
+    <div class="pills">
+      <div class="pill v1">v1 · 开发 push</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="flow">
+      <span class="lb">sddl 工作流节点</span>
+      <span class="chip">需求</span><span class="arw">→</span>
+      <span class="chip">意图</span><span class="arw">→</span>
+      <span class="chip">计划 / 用例</span><span class="arw">→</span>
+      <span class="chip">任务</span><span class="arw">→</span>
+      <span class="chip">代码</span><span class="arw">→</span>
+      <span class="chip">测试</span><span class="arw">→</span>
+      <span class="chip">AI Review</span><span class="arw">→</span>
+      <span class="chip">提交</span>
+    </div>
+    <div class="src">意图识别产出 <span class="mono">intent/02-intent-local.md</span>（角色 / 涉及仓库 / 分支）本地不提交，并透传后续节点；各节点 push 产出到公共仓库，并虚线引用项目自定义 rule / mcp / skills。</div>
+  </div>
+
+  <div style="width:1400px;height:1856px;"></div>
+  </div><!-- .harness-inner -->
+
+  <div data-canvas-bottom-safe-area="12" style="height:24px;"></div>
+</main>
+</body>
+</html>

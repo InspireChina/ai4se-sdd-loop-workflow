@@ -1,4 +1,4 @@
-﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow（Windows）
+﻿# start.ps1 — 创建虚拟环境、安装依赖并启动 ai4se-sddl-collab-harness（Windows）
 # 本文件须以 UTF-8 BOM 保存，Windows PowerShell 5.1 才能正确解析中文。
 #
 # 注意: 禁止 python -c 传入含百分号格式化的代码；PS 5.1 解析阶段可能误判并级联报错。
@@ -244,7 +244,7 @@ function Test-PackageInstalled([string]$Py) {
         # pip may warn about stale "~*" directories on stderr. Under Windows
         # PowerShell 5.1 that warning must not become a terminating error.
         $ErrorActionPreference = "SilentlyContinue"
-        & $Py -m pip show ai4se-sdd-loop-workflow 2>$null | Out-Null
+        & $Py -m pip show ai4se-sddl-collab-harness 2>$null | Out-Null
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousPreference

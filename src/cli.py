@@ -50,7 +50,9 @@ def skill_template_path(engine: Path) -> Path:
     return path
 
 
-ENGINE_DIR_NAME = "ai4se-sdd-loop-workflow"
+ENGINE_DIR_NAME = "ai4se-sddl-collab-harness"
+# 旧仓库目录名，发现引擎时一并兼容
+ENGINE_DIR_ALIASES = (ENGINE_DIR_NAME, "ai4se-sdd-loop-workflow", "sddl-harness")
 
 
 def _is_engine(path: Path) -> bool:
@@ -64,11 +66,19 @@ def _pick_engine_among(candidates: list[Path]) -> Path | None:
         return None
     if len(engines) == 1:
         return engines[0]
-    preferred = [p for p in engines if p.name == ENGINE_DIR_NAME]
+    preferred = [p for p in engines if p.name in ENGINE_DIR_ALIASES]
     if len(preferred) == 1:
         return preferred[0]
     listed = "\n".join(f"  - {p}" for p in engines)
     raise SystemExit(f"错误: 多个引擎目录，请用 --workflow-root:\n{listed}")
+
+
+def _named_engine(parent: Path) -> Path | None:
+    for name in ENGINE_DIR_ALIASES:
+        candidate = parent / name
+        if _is_engine(candidate):
+            return candidate.resolve()
+    return None
 
 
 def find_engine_root(explicit: Path | None) -> Path:
@@ -87,16 +97,16 @@ def find_engine_root(explicit: Path | None) -> Path:
     if _is_engine(cwd):
         return cwd
 
-    # 业务项目根下嵌套 clone：<app>/ai4se-sdd-loop-workflow/
+    # 业务项目根下嵌套 clone：<app>/ai4se-sddl-collab-harness/
     found = _pick_engine_among(list(cwd.iterdir()))
     if found:
         return found
 
-    # 与业务项目同级：<parent>/ai4se-sdd-loop-workflow/
+    # 与业务项目同级：<parent>/ai4se-sddl-collab-harness/
     parent = cwd.parent
-    sibling = parent / ENGINE_DIR_NAME
-    if _is_engine(sibling):
-        return sibling.resolve()
+    sibling = _named_engine(parent)
+    if sibling is not None:
+        return sibling
     found = _pick_engine_among(list(parent.iterdir()) if parent.is_dir() else [])
     if found:
         return found
@@ -104,9 +114,9 @@ def find_engine_root(explicit: Path | None) -> Path:
     for ancestor in cwd.parents:
         if _is_engine(ancestor):
             return ancestor.resolve()
-        named = ancestor / ENGINE_DIR_NAME
-        if _is_engine(named):
-            return named.resolve()
+        named = _named_engine(ancestor)
+        if named is not None:
+            return named
 
     raise SystemExit(
         "错误: 找不到 workflow 引擎，请传入 --workflow-root。\n"

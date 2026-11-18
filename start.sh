@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — 创建虚拟环境、安装依赖并启动 ai4se-sdd-loop-workflow
+# start.sh — 创建虚拟环境、安装依赖并启动 ai4se-sddl-collab-harness
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -173,7 +173,7 @@ VENV_PY="$(venv_python)"
 [[ -n "$VENV_PY" ]] || die "未找到虚拟环境 Python"
 
 package_installed() {
-  "$VENV_PY" -m pip show ai4se-sdd-loop-workflow >/dev/null 2>&1
+  "$VENV_PY" -m pip show ai4se-sddl-collab-harness >/dev/null 2>&1
 }
 
 if ! package_installed; then

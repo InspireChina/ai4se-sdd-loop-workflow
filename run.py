@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""运行 ai4se-sdd-loop-workflow 的 CLI 入口。"""
+"""运行 ai4se-sddl-collab-harness 的 CLI 入口。"""
 
 import argparse
 import logging
